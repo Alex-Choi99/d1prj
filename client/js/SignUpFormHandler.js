@@ -1,0 +1,118 @@
+/**
+ * Sign-Up Form Handler Class
+ */
+class SignUpFormHandler extends FormHandler {
+    constructor() {
+        super();
+        this.initializeElements();
+        this.attachEventListeners();
+        this.setupRealTimeValidation();
+    }
+
+    /**
+     * Initialize Form Elements
+     * @returns 
+     */
+    initializeElements() {
+        this.form = document.getElementById(Constants.ELEMENT_ID_SIGNUP_FORM);
+        if (!this.form) return;
+
+        this.inputs = {
+            email: document.getElementById(Constants.ELEMENT_ID_EMAIL),
+            password: document.getElementById(Constants.ELEMENT_ID_PASSWORD),
+            confirmPassword: document.getElementById(Constants.ELEMENT_ID_CONFIRM_PASSWORD)
+        };
+
+        this.messages = {
+            success: document.getElementById(Constants.ELEMENT_ID_SUCCESS_MESSAGE)
+        };
+    }
+
+    /**
+     * Attach Event Listeners
+     * @returns 
+     */
+    attachEventListeners() {
+        if (!this.form) return;
+
+        this.form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleSubmit();
+        });
+    }
+
+    /**
+     * Validate Email Field
+     * @returns true if valid, false otherwise
+     */
+    validateEmailField() {
+        if (!this.validateEmail(this.inputs.email.value)) {
+            this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Validate Password
+     * @returns true if valid, false otherwise
+     */
+    validatePassword() {
+        if (this.inputs.password.value.length < Constants.MIN_PASSWORD_LENGTH) {
+            this.showError(Constants.ERROR_ID_PASSWORD, this.inputs.password);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Validate Password Confirmation
+     * @returns true if valid, false otherwise
+     */
+    validatePasswordConfirmation() {
+        if (this.inputs.password.value !== this.inputs.confirmPassword.value) {
+            this.showError(Constants.ERROR_ID_CONFIRM_PASSWORD, this.inputs.confirmPassword);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Validate Entire Form
+     * @returns returns everything that is valid
+     */
+    validateForm() {
+        this.clearErrors();
+        
+        const validations = [
+            this.validateEmailField(),
+            this.validatePassword(),
+            this.validatePasswordConfirmation()
+        ];
+
+        return validations.every(isValid => isValid);
+    }
+
+    /**
+     * Save User Data to Local Storage
+     */
+    saveUserData() {
+        const userData = {
+            [Constants.USER_FIELD_EMAIL]: this.inputs.email.value,
+            [Constants.USER_FIELD_PASSWORD]: this.inputs.password.value
+        };
+        
+        localStorage.setItem(Constants.STORAGE_KEY_USER, JSON.stringify(userData));
+    }
+
+    /**
+     * Handle Form Submission
+     */
+    handleSubmit() {
+        if (this.validateForm()) {
+            this.saveUserData();
+            this.showMessage(this.messages.success);
+            this.redirectAfterDelay(Constants.PAGE_SIGNIN);
+        }
+    }
+}
