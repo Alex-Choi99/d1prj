@@ -53,7 +53,7 @@ class Main {
     /**
      * Run HTTP Server
      */
-    runServer(db) {
+    static runServer(db) {
         const server = http.createServer((req, res) => {
             switch(req.method) {
                 case OPTIONS:
