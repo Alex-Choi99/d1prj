@@ -80,30 +80,30 @@ class SignInFormHandler extends FormHandler {
      * Retrieve Stored User from Local Storage
      * @returns stored user object or null
      */
-    getStoredUser() {
-        const userData = localStorage.getItem(Constants.STORAGE_KEY_USER);
-        return userData ? JSON.parse(userData) : null;
-    }
+    // getStoredUser() {
+    //     const userData = localStorage.getItem(Constants.STORAGE_KEY_USER);
+    //     return userData ? JSON.parse(userData) : null;
+    // }
 
-    /**
-     * Verify Credentials
-     * @param {*} storedUser | stored user object
-     * @returns true if credentials match, false otherwise
-     */
-    verifyCredentials(storedUser) {
-        return storedUser &&
-               storedUser[Constants.USER_FIELD_EMAIL] === this.inputs.email.value &&
-               storedUser[Constants.USER_FIELD_PASSWORD] === this.inputs.password.value;
-    }
+    // /**
+    //  * Verify Credentials
+    //  * @param {*} storedUser | stored user object
+    //  * @returns true if credentials match, false otherwise
+    //  */
+    // verifyCredentials(storedUser) {
+    //     return storedUser &&
+    //            storedUser[Constants.USER_FIELD_EMAIL] === this.inputs.email.value &&
+    //            storedUser[Constants.USER_FIELD_PASSWORD] === this.inputs.password.value;
+    // }
 
     /**
      * Handle Remember Me Functionality
      */
-    handleRememberMe() {
-        if (this.inputs.rememberMe.checked) {
-            localStorage.setItem(Constants.STORAGE_KEY_REMEMBER_ME, Constants.STORAGE_VALUE_TRUE);
-        }
-    }
+    // handleRememberMe() {
+    //     if (this.inputs.rememberMe.checked) {
+    //         localStorage.setItem(Constants.STORAGE_KEY_REMEMBER_ME, Constants.STORAGE_VALUE_TRUE);
+    //     }
+    // }
 
     /**
      * Handle Successful Login
@@ -117,21 +117,41 @@ class SignInFormHandler extends FormHandler {
     /**
      * Handle Failed Login
      */
-    handleFailedLogin() {
+    handleFailedLogin(errorMessage) {
+        if (this.messages.error) {
+            const errorText = this.messages.error.querySelector('p') || this.messages.error;
+            errorText.textContent = errorMessage || 'Invalid email or password';
+        }
         this.showMessage(this.messages.error);
     }
 
     /**
      * Handle Form Submission
      */
-    handleSubmit() {
+    async handleSubmit() {
         if (this.validateForm()) {
-            const storedUser = this.getStoredUser();
-            
-            if (this.verifyCredentials(storedUser)) {
-                this.handleSuccessfulLogin();
-            } else {
-                this.handleFailedLogin();
+            const payload = {
+                email: this.inputs.email.value,
+                password: this.inputs.password.value
+            };
+            try {
+                const response = await fetch('https://d1prj.onrender.com/signin.html', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if(!response.ok){
+                    this.handleFailedLogin(result.error || 'Sign in Error');
+                    return;
+                }
+
+                this.handleSuccessfulLogin({email: result.email});
+            }
+            catch (error) {
+                console.error('Sign in error:', error);
+                this.handleFailedLogin('Network Error. Please try again.');
             }
         }
     }

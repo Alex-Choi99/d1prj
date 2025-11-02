@@ -1,5 +1,6 @@
 const http = require('http');
 const mysql = require('mysql');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 const DB_HOST               = process.env.DB_HOST;
