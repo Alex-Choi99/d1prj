@@ -96,23 +96,46 @@ class SignUpFormHandler extends FormHandler {
     /**
      * Save User Data to Local Storage
      */
-    saveUserData() {
-        const userData = {
-            [Constants.USER_FIELD_EMAIL]: this.inputs.email.value,
-            [Constants.USER_FIELD_PASSWORD]: this.inputs.password.value
-        };
+    // saveUserData() {
+    //     const userData = {
+    //         [Constants.USER_FIELD_EMAIL]: this.inputs.email.value,
+    //         [Constants.USER_FIELD_PASSWORD]: this.inputs.password.value
+    //     };
         
-        localStorage.setItem(Constants.STORAGE_KEY_USER, JSON.stringify(userData));
-    }
+    //     localStorage.setItem(Constants.STORAGE_KEY_USER, JSON.stringify(userData));
+    // }
 
     /**
      * Handle Form Submission
      */
-    handleSubmit() {
+    async handleSubmit() {
         if (this.validateForm()) {
-            this.saveUserData();
-            this.showMessage(this.messages.success);
-            this.redirectAfterDelay(Constants.PAGE_SIGNIN);
+            const payload = {
+                email: this.inputs.email.value,
+                password: this.inputs.password.value
+            };
+
+            try {
+                const response = await fetch('https://d1prj.onrender.com/signup.html', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, result.message || 'Server Error');
+                    return;
+                }
+                // this.saveUserData(result);
+                this.showMessage(this.messages.success);
+                this.redirectAfterDelay(Constants.PAGE_SIGNIN);
+            }
+            catch (error){
+                this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, 'Network Error');
+                console.error(error);
+            }
         }
     }
 }
