@@ -1,7 +1,7 @@
 const ApiManagerAi = require('./ApiManagerAi.js');
 const http = require('http');
 
-const PORT = 3000;
+const PORT = 3001;
 const HEADER_CONTENT_TYPE = "Content-Type";
 const HEADER_JSON_CONTENT = "application/json";
 const GET = "GET";
@@ -44,11 +44,50 @@ class Main {
 
                     req.on(END, async () => {
                         try {
-                            body += "Based on the following content, generate 5 multiple-choice with 4 options each or short written quiz questions. Format each question clearly with the question, options (A, B, C, D), and indicate the correct answer.";
-                            const response = await Main.query(body);
+                            const prompt = body + "\n\nBased on the following content, generate 10 flashcard questions and answers. " +
+                                "Return ONLY a valid JSON array with no additional text. Each object must have 'question' and 'answer' fields. " +
+                                "Format: [{\"question\": \"...\", \"answer\": \"...\"}, ...]. " +
+                                "Keep questions clear and concise. Keep answers brief and accurate.";
                             
-                            res.writeHead(200, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                            res.end(JSON.stringify(response));
+                            const response = await Main.query(prompt);
+                            
+                            // Extract the message content
+                            const messageContent = response.choices[0].message.content;
+                            
+                            // Parse the JSON from the response
+                            let cards;
+                            try {
+                                // Try to extract JSON if it's wrapped in markdown code blocks
+                                const jsonMatch = messageContent.match(/\[[\s\S]*\]/);
+                                if (jsonMatch) {
+                                    cards = JSON.parse(jsonMatch[0]);
+                                } else {
+                                    cards = JSON.parse(messageContent);
+                                }
+
+                                // Validate that we have an array of cards
+                                if (!Array.isArray(cards) || cards.length === 0) {
+                                    throw new Error("Invalid cards format");
+                                }
+
+                                // Return structured response with cards
+                                res.writeHead(200, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                                res.end(JSON.stringify({
+                                    success: true,
+                                    cards: cards,
+                                    count: cards.length,
+                                    model: response.model,
+                                    usage: response.usage
+                                }));
+                            } catch (parseError) {
+                                console.error('Error parsing AI response:', parseError);
+                                console.log('AI Response:', messageContent);
+                                res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                                res.end(JSON.stringify({ 
+                                    error: "Failed to parse flashcards from AI response",
+                                    rawResponse: messageContent
+                                }));
+                            }
                         } catch (error) {
                             console.error('Error processing request:', error);
                             res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
