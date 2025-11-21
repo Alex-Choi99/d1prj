@@ -8,6 +8,7 @@ const DB_USER               = process.env.DB_USER;
 const DB_PASSWORD           = process.env.DB_PASSWORD;
 const DB_NAME               = process.env.DB_NAME;
 const PORT                  = 3001;
+const SALT_ROUNDS           = 10;
 const HEADER_CONTENT_TYPE   = "Content-Type";
 const HEADER_JSON_CONTENT   = "application/json";
 const GET                   = "GET";
@@ -73,20 +74,23 @@ class Main {
                     res.setHeader(CORS.ORIGIN, ALL);
                     req.on(DATA, chunk => body += chunk.toString());
 
-                    req.on(END, () => {
+                    req.on(END, async () => {
 
                         let email;
                         let password;
+                        let hashed_pw;
                         const parsed = JSON.parse(body);
                         
                         email = parsed.email;
                         password = parsed.password;
 
-                        console.log(`Received email: ${email}, password: ${password}`);
+                        hashed_pw = await bcrypt.hash(password, SALT_ROUNDS);
+
+                        console.log(`Received email: ${email}, password: ${hashed_pw}`);
 
                         const sql = `INSERT INTO user (email, password) VALUES (?, ?)`;
 
-                        db.query(sql, [email, password], (err) => {
+                        db.query(sql, [email, hashed_pw], (err) => {
                             if (err) {
                                 res.end(JSON.stringify({ message: POST_FAIL_MSG }));
                             } else {

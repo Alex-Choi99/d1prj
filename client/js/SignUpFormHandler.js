@@ -1,4 +1,4 @@
-const SERVER = 'https://d1prj.onrender.com/';
+const SERVER = 'http://localhost:3001/';
 
 /**
  * Sign-Up Form Handler Class
