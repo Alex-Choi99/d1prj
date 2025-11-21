@@ -16,6 +16,7 @@ const OPTIONS               = "OPTIONS";
 const DATA                  = "data";
 const ALL                   = "*";
 const BODY_DEFAULT          = "";
+const END                   = "end";
 const DB_CONNECTION_MSG     = "Connected to database.\n";
 const CORS = {
     ORIGIN: 'Access-Control-Allow-Origin',
@@ -23,6 +24,7 @@ const CORS = {
     HEADERS: 'Access-Control-Allow-Headers'
 };
 const POST_FAIL_MSG     = "Data insertion failed.\n";
+const POST_SUCCESS_MSG  = "Data inserted successfully.\n";
 const GET_FAIL_MSG      = "Data retrieval failed.\n";
 
 /**
@@ -80,9 +82,11 @@ class Main {
                         email = parsed.email;
                         password = parsed.password;
 
-                        const sql = `INSERT INTO user (email, password) VALUES (${email}, ${password})`;
+                        console.log(`Received email: ${email}, password: ${password}`);
 
-                        db.query(sql, (err) => {
+                        const sql = `INSERT INTO user (email, password) VALUES (?, ?)`;
+
+                        db.query(sql, [email, password], (err) => {
                             if (err) {
                                 res.end(JSON.stringify({ message: POST_FAIL_MSG }));
                             } else {
@@ -103,9 +107,9 @@ class Main {
         });
     }
 
-    static validateEmail(email) {
+    // static validateEmail(email) {
         
-    }
+    // }
 }
 
 module.exports = Main;

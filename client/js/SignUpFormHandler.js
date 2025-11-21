@@ -1,3 +1,5 @@
+const SERVER = 'https://d1prj.onrender.com/';
+
 /**
  * Sign-Up Form Handler Class
  */
@@ -94,18 +96,6 @@ class SignUpFormHandler extends FormHandler {
     }
 
     /**
-     * Save User Data to Local Storage
-     */
-    // saveUserData() {
-    //     const userData = {
-    //         [Constants.USER_FIELD_EMAIL]: this.inputs.email.value,
-    //         [Constants.USER_FIELD_PASSWORD]: this.inputs.password.value
-    //     };
-        
-    //     localStorage.setItem(Constants.STORAGE_KEY_USER, JSON.stringify(userData));
-    // }
-
-    /**
      * Handle Form Submission
      */
     async handleSubmit() {
@@ -116,7 +106,7 @@ class SignUpFormHandler extends FormHandler {
             };
 
             try {
-                const response = await fetch('https://d1prj.onrender.com/signup.html', {
+                const response = await fetch(SERVER, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload)
