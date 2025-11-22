@@ -4,6 +4,7 @@
 class SignInFormHandler extends FormHandler {
     constructor() {
         super();
+        this.isSubmitting = false; // Add flag to prevent double submission
         this.initializeElements();
         this.attachEventListeners();
         this.loadRememberedUser();
@@ -27,6 +28,10 @@ class SignInFormHandler extends FormHandler {
             success: document.getElementById(Constants.ELEMENT_ID_SUCCESS_MESSAGE),
             error: document.getElementById(Constants.ELEMENT_ID_GENERAL_ERROR)
         };
+
+        // Hide all messages on initialization
+        if (this.messages.success) this.hideMessage(this.messages.success);
+        if (this.messages.error) this.hideMessage(this.messages.error);
     }
 
     /**
@@ -99,17 +104,52 @@ class SignInFormHandler extends FormHandler {
     /**
      * Handle Remember Me Functionality
      */
-    // handleRememberMe() {
-    //     if (this.inputs.rememberMe.checked) {
-    //         localStorage.setItem(Constants.STORAGE_KEY_REMEMBER_ME, Constants.STORAGE_VALUE_TRUE);
-    //     }
-    // }
+    handleRememberMe() {
+        if (this.inputs.rememberMe.checked) {
+            // Store only the email (never store passwords in localStorage!)
+            const userData = {
+                [Constants.USER_FIELD_EMAIL]: this.inputs.email.value
+            };
+            localStorage.setItem(Constants.STORAGE_KEY_USER, JSON.stringify(userData));
+            localStorage.setItem(Constants.STORAGE_KEY_REMEMBER_ME, Constants.STORAGE_VALUE_TRUE);
+        } else {
+            // Clear stored data if unchecked
+            localStorage.removeItem(Constants.STORAGE_KEY_USER);
+            localStorage.removeItem(Constants.STORAGE_KEY_REMEMBER_ME);
+        }
+    }
+
+    /**
+     * Retrieve Stored User from Local Storage
+     * @returns stored user object or null
+     */
+    getStoredUser() {
+        const userData = localStorage.getItem(Constants.STORAGE_KEY_USER);
+        return userData ? JSON.parse(userData) : null;
+    }
+
+    /**
+     * Load Remembered User Email
+     */
+    loadRememberedUser() {
+        if (localStorage.getItem(Constants.STORAGE_KEY_REMEMBER_ME) === Constants.STORAGE_VALUE_TRUE) {
+            const storedUser = this.getStoredUser();
+            if (storedUser && storedUser[Constants.USER_FIELD_EMAIL]) {
+                this.inputs.email.value = storedUser[Constants.USER_FIELD_EMAIL];
+                this.inputs.rememberMe.checked = true;
+            }
+        }
+    }
 
     /**
      * Handle Successful Login
      */
     handleSuccessfulLogin() {
         this.handleRememberMe();
+
+        sessionStorage.setItem('isLoggedIn', 'true');
+        sessionStorage.setItem('userEmail', this.inputs.email.value);
+
         this.showMessage(this.messages.success);
         this.redirectAfterDelay(Constants.PAGE_LANDING);
     }
@@ -129,13 +169,28 @@ class SignInFormHandler extends FormHandler {
      * Handle Form Submission
      */
     async handleSubmit() {
+        // Prevent double submission
+        if (this.isSubmitting) {
+            return;
+        }
+
         if (this.validateForm()) {
+            this.isSubmitting = true;
+            
+            // Disable submit button
+            const submitButton = this.form.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton ? submitButton.textContent : '';
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = 'Signing In...';
+            }
+
             const payload = {
                 email: this.inputs.email.value,
                 password: this.inputs.password.value
             };
             try {
-                const response = await fetch('https://d1prj.onrender.com/signin.html', {
+                const response = await fetch('http://localhost:3000/signin', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload)
@@ -144,14 +199,29 @@ class SignInFormHandler extends FormHandler {
                 const result = await response.json();
                 if(!response.ok){
                     this.handleFailedLogin(result.error || 'Sign in Error');
+                    
+                    // Re-enable button on error
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        submitButton.textContent = originalButtonText;
+                    }
+                    this.isSubmitting = false;
                     return;
                 }
 
                 this.handleSuccessfulLogin({email: result.email});
+                // Don't re-enable button since we're redirecting
             }
             catch (error) {
                 console.error('Sign in error:', error);
                 this.handleFailedLogin('Network Error. Please try again.');
+                
+                // Re-enable button on error
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalButtonText;
+                }
+                this.isSubmitting = false;
             }
         }
     }

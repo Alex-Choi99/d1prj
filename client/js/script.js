@@ -1,9 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById(Constants.ELEMENT_ID_SIGNUP_FORM)) {
-        new SignUpFormHandler();
-    }
+    Auth.init() //already handles form initialization
     
-    if (document.getElementById(Constants.ELEMENT_ID_SIGNIN_FORM)) {
-        new SignInFormHandler();
+    Auth.updateNavigation();
+    
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            Auth.logout();
+        });
     }
 });

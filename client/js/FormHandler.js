@@ -21,10 +21,14 @@ class FormHandler {
      * Show Error Message and Highlight Input
      * @param {*} errorId | ID of the error message element
      * @param {*} inputElement | input element to highlight
+     * @param {*} customMessage | optional custom error message
      */
-    showError(errorId, inputElement) {
+    showError(errorId, inputElement, customMessage = null) {
         const errorElement = document.getElementById(errorId);
         if (errorElement) {
+            if (customMessage) {
+                errorElement.textContent = customMessage;
+            }
             errorElement.classList.add(Constants.CSS_CLASS_SHOW);
         }
         if (inputElement) {

@@ -13,9 +13,14 @@
             <nav>
                 <div class="logo">YourBrand</div>
                 <ul>
-                    <li><a href="landing.html">Home</a></li>
-                    <li><a href="#features">Features</a></li>
-                    <li><a href="signup.html">Sign Up</a></li>
+                    <li><a href="index.html">Home</a></li>
+                    <li id="navSignup"><a href="signup.html">Sign Up</a></li>
+                    <li id="navUserInfo" style="display: none;">
+                        <span id="userEmail"></span>
+                    </li>
+                    <li id="navLogout" style="display: none;">
+                        <a href="#" id="logoutBtn">Logout</a>
+                    </li>
                 </ul>
             </nav>
         </div>
@@ -52,5 +57,6 @@
         </div>
     </footer>
     <script src="./js/script.js"></script>
+    <script src="./js/auth.js"></script>
 </body>
 </html>

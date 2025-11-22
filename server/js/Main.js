@@ -14,6 +14,7 @@ const GET                   = "GET";
 const POST                  = "POST";
 const OPTIONS               = "OPTIONS";
 const DATA                  = "data";
+const END                   = "end";
 const ALL                   = "*";
 const BODY_DEFAULT          = "";
 const DB_CONNECTION_MSG     = "Connected to database.\n";
@@ -23,6 +24,7 @@ const CORS = {
     HEADERS: 'Access-Control-Allow-Headers'
 };
 const POST_FAIL_MSG     = "Data insertion failed.\n";
+const POST_SUCCESS_MSG  = "Account created successfully.\n";
 const GET_FAIL_MSG      = "Data retrieval failed.\n";
 
 /**
@@ -72,23 +74,95 @@ class Main {
                     req.on(DATA, chunk => body += chunk.toString());
 
                     req.on(END, () => {
+                        try {
+                            const parsed = JSON.parse(body);
+                            const email = parsed.email;
+                            const password = parsed.password;
 
-                        let email;
-                        let password;
-                        const parsed = JSON.parse(body);
-                        
-                        email = parsed.email;
-                        password = parsed.password;
+                            if (req.url === '/signup') {
+                                if (!this.validateEmail(email)) {
+                                    res.writeHead(400, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                                    res.end(JSON.stringify({ message: "Invalid email format" }));
+                                    return;
+                                }
 
-                        const sql = `INSERT INTO user (email, password) VALUES (${email}, ${password})`;
+                                const checkEmailSql = `SELECT email FROM user WHERE email = ?`;
 
-                        db.query(sql, (err) => {
-                            if (err) {
-                                res.end(JSON.stringify({ message: POST_FAIL_MSG }));
-                            } else {
-                                res.end(JSON.stringify({ message: POST_SUCCESS_MSG }));
+                                db.query(checkEmailSql, [email], async (err, results) => {
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                                        res.end(JSON.stringify({ error: "Server error" }));
+                                        return;
+                                    }
+
+                                    if (results.length > 0) {
+                                        res.writeHead(409, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                                        res.end(JSON.stringify({ message: "Email already in use" }));
+                                        return;
+                                    }
+
+                                    const hashedPassword = await bcrypt.hash(password, 10);
+                                    const insertSql = `INSERT INTO user (email, password) VALUES (?, ?)`;
+
+                                    db.query(insertSql, [email, hashedPassword] , (err, result) => {
+                                        res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                                        if (err) {
+                                            console.error('Database error:', err);
+                                            res.writeHead(400);
+                                            res.end(JSON.stringify({ message: POST_FAIL_MSG }));
+                                        } else {
+                                            res.writeHead(200);
+                                            res.end(JSON.stringify({
+                                                message: POST_SUCCESS_MSG,
+                                                userId: result.insertId
+                                            }));
+                                        }
+                                    });
+                                });
+                            } else if (req.url === '/signin') {
+                                const sql = `SELECT * FROM user WHERE email = ?`;
+
+                                db.query(sql, [email], async (err, results) => {
+                                    res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+                                    
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        res.writeHead(500);
+                                        res.end(JSON.stringify({ error: "Server error" }));
+                                        return;
+                                    }
+
+                                    if (results.length === 0) {
+                                        res.writeHead(401);
+                                        res.end(JSON.stringify({ error: "Invalid email or password" }));
+                                        return;
+                                    }
+
+                                    const user = results[0];
+                                    
+                                    // Compare password with hashed password
+                                    const passwordMatch = await bcrypt.compare(password, user.password);
+
+                                    if (passwordMatch) {
+                                        res.writeHead(200);
+                                        res.end(JSON.stringify({ 
+                                            message: "Sign in successful",
+                                            email: user.email 
+                                        }));
+                                    } else {
+                                        res.writeHead(401);
+                                        res.end(JSON.stringify({ error: "Invalid email or password" }));
+                                    }
+                                });
                             }
-                        });
+                        }
+                        catch (error) {
+                            console.error('Server error:', error);
+                            res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                            res.end(JSON.stringify({ error: "Server error" }));
+                        }
                     });
                     break;
                 
@@ -104,7 +178,8 @@ class Main {
     }
 
     static validateEmail(email) {
-        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
     }
 }
 

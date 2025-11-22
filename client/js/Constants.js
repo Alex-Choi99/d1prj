@@ -33,7 +33,7 @@ class Constants {
     static CSS_SELECTOR_ERROR_MESSAGE = '.error-message';
 
     static PAGE_SIGNIN = 'signin.html';
-    static PAGE_LANDING = 'landing.html';
+    static PAGE_LANDING = 'index.html';
 
     static USER_FIELD_EMAIL = 'email';
     static USER_FIELD_PASSWORD = 'password';
