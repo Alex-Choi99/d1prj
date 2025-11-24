@@ -8,7 +8,6 @@ const DB_USER               = process.env.DB_USER;
 const DB_PASSWORD           = process.env.DB_PASSWORD;
 const DB_NAME               = process.env.DB_NAME;
 const PORT                  = 3001;
-const SALT_ROUNDS           = 10;
 const HEADER_CONTENT_TYPE   = "Content-Type";
 const HEADER_JSON_CONTENT   = "application/json";
 const GET                   = "GET";
@@ -26,7 +25,11 @@ const CORS = {
 };
 const POST_FAIL_MSG     = "Data insertion failed.\n";
 const POST_SUCCESS_MSG  = "Data inserted successfully.\n";
-const GET_FAIL_MSG      = "Data retrieval failed.\n";
+const INVALID_EMAIL_MSG = "Invalid email format.\n";
+const SERVER_ERROR_MSG = "Server error.\n";
+const EMAIL_ALREADY_IN_USE_MSG = "Email already in use.\n";
+const INVALID_INPUT_MSG = "Invalid email or password.\n";
+const NOT_FOUND_MSG = "Not Found.\n";
 
 /**
  * Runs the program
@@ -82,8 +85,11 @@ class Main {
 
                             if (req.url === '/signup') {
                                 if (!this.validateEmail(email)) {
-                                    res.writeHead(400, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                                    res.end(JSON.stringify({ message: "Invalid email format" }));
+                                    res.writeHead(400, { 
+                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                        [CORS.ORIGIN]: ALL
+                                    });
+                                    res.end(JSON.stringify({ message: INVALID_EMAIL_MSG }));
                                     return;
                                 }
 
@@ -92,14 +98,20 @@ class Main {
                                 db.query(checkEmailSql, [email], async (err, results) => {
                                     if (err) {
                                         console.error('Database error:', err);
-                                        res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                                        res.end(JSON.stringify({ error: "Server error" }));
+                                        res.writeHead(500, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: ALL
+                                        });
+                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
                                         return;
                                     }
 
                                     if (results.length > 0) {
-                                        res.writeHead(409, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                                        res.end(JSON.stringify({ message: "Email already in use" }));
+                                        res.writeHead(409, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: ALL
+                                        });
+                                        res.end(JSON.stringify({ message: EMAIL_ALREADY_IN_USE_MSG }));
                                         return;
                                     }
 
@@ -111,10 +123,10 @@ class Main {
 
                                         if (err) {
                                             console.error('Database error:', err);
-                                            res.writeHead(400);
+                                            res.writeHead(400, { [CORS.ORIGIN]: ALL });
                                             res.end(JSON.stringify({ message: POST_FAIL_MSG }));
                                         } else {
-                                            res.writeHead(200);
+                                            res.writeHead(200, { [CORS.ORIGIN]: ALL });
                                             res.end(JSON.stringify({
                                                 message: POST_SUCCESS_MSG,
                                                 userId: result.insertId
@@ -130,14 +142,14 @@ class Main {
 
                                     if (err) {
                                         console.error('Database error:', err);
-                                        res.writeHead(500);
-                                        res.end(JSON.stringify({ error: "Server error" }));
+                                        res.writeHead(500, { [CORS.ORIGIN]: ALL });
+                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
                                         return;
                                     }
 
                                     if (results.length === 0) {
-                                        res.writeHead(401);
-                                        res.end(JSON.stringify({ error: "Invalid email or password" }));
+                                        res.writeHead(401, { [CORS.ORIGIN]: ALL });
+                                        res.end(JSON.stringify({ error: INVALID_INPUT_MSG }));
                                         return;
                                     }
 
@@ -147,29 +159,35 @@ class Main {
                                     const passwordMatch = await bcrypt.compare(password, user.password);
 
                                     if (passwordMatch) {
-                                        res.writeHead(200);
+                                        res.writeHead(200, { [CORS.ORIGIN]: ALL });
                                         res.end(JSON.stringify({
                                             message: "Sign in successful",
                                             email: user.email
                                         }));
                                     } else {
-                                        res.writeHead(401);
-                                        res.end(JSON.stringify({ error: "Invalid email or password" }));
+                                        res.writeHead(401, { [CORS.ORIGIN]: ALL });
+                                        res.end(JSON.stringify({ error: INVALID_INPUT_MSG }) );
                                     }
                                 });
                             }
                         }
                         catch (error) {
                             console.error('Server error:', error);
-                            res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                            res.writeHead(500, { 
+                                [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                [CORS.ORIGIN]: ALL
+                            });
                             res.end(JSON.stringify({ error: "Server error" }));
                         }
                     });
                     break;
 
                 default:
-                    res.writeHead(404, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                    res.end(JSON.stringify({ error: "Not Found" }));
+                    res.writeHead(404, { 
+                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                        [CORS.ORIGIN]: ALL
+                    });
+                    res.end(JSON.stringify({ error: NOT_FOUND_MSG }) );
             }
         });
 
