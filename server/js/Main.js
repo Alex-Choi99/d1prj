@@ -96,22 +96,22 @@ class Main {
                                 const checkEmailSql = `SELECT email FROM user WHERE email = ?`;
 
                                 db.query(checkEmailSql, [email], async (err, results) => {
-                                    if (err) {
-                                        console.error('Database error:', err);
-                                        res.writeHead(500, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: ALL
-                                        });
-                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                        return;
-                                    }
-
                                     if (results.length > 0) {
                                         res.writeHead(409, { 
                                             [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
                                             [CORS.ORIGIN]: ALL
                                         });
                                         res.end(JSON.stringify({ message: EMAIL_ALREADY_IN_USE_MSG }));
+                                        return;
+                                    }
+                                    
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        res.writeHead(500, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: ALL
+                                        });
+                                        res.end(JSON.stringify({ error: err })); 
                                         return;
                                     }
 
