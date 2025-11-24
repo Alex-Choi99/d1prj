@@ -3,29 +3,29 @@ const mysql = require('mysql');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 
-const DB_HOST               = process.env.DB_HOST;
-const DB_USER               = process.env.DB_USER;
-const DB_PASSWORD           = process.env.DB_PASSWORD;
-const DB_NAME               = process.env.DB_NAME;
-const PORT                  = 3000;
-const HEADER_CONTENT_TYPE   = "Content-Type";
-const HEADER_JSON_CONTENT   = "application/json";
-const GET                   = "GET";
-const POST                  = "POST";
-const OPTIONS               = "OPTIONS";
-const DATA                  = "data";
-const END                   = "end";
-const ALL                   = "*";
-const BODY_DEFAULT          = "";
-const DB_CONNECTION_MSG     = "Connected to database.\n";
+const DB_HOST = process.env.DB_HOST;
+const DB_USER = process.env.DB_USER;
+const DB_PASSWORD = process.env.DB_PASSWORD;
+const DB_NAME = process.env.DB_NAME;
+const PORT = 3000;
+const HEADER_CONTENT_TYPE = "Content-Type";
+const HEADER_JSON_CONTENT = "application/json";
+const GET = "GET";
+const POST = "POST";
+const OPTIONS = "OPTIONS";
+const DATA = "data";
+const END = "end";
+const ALL = "*";
+const BODY_DEFAULT = "";
+const DB_CONNECTION_MSG = "Connected to database.\n";
 const CORS = {
     ORIGIN: 'Access-Control-Allow-Origin',
     METHODS: 'Access-Control-Allow-Methods',
     HEADERS: 'Access-Control-Allow-Headers'
 };
-const POST_FAIL_MSG     = "Data insertion failed.\n";
-const POST_SUCCESS_MSG  = "Account created successfully.\n";
-const GET_FAIL_MSG      = "Data retrieval failed.\n";
+const POST_FAIL_MSG = "Data insertion failed.\n";
+const POST_SUCCESS_MSG = "Account created successfully.\n";
+const GET_FAIL_MSG = "Data retrieval failed.\n";
 
 /**
  * Runs the program
@@ -59,7 +59,7 @@ class Main {
      */
     static runServer(db) {
         const server = http.createServer((req, res) => {
-            switch(req.method) {
+            switch (req.method) {
                 case OPTIONS:
                     res.setHeader(CORS.ORIGIN, ALL);
                     res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${OPTIONS}`);
@@ -105,7 +105,7 @@ class Main {
                                     const hashedPassword = await bcrypt.hash(password, 10);
                                     const insertSql = `INSERT INTO user (email, password) VALUES (?, ?)`;
 
-                                    db.query(insertSql, [email, hashedPassword] , (err, result) => {
+                                    db.query(insertSql, [email, hashedPassword], (err, result) => {
                                         res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
 
                                         if (err) {
@@ -126,7 +126,7 @@ class Main {
 
                                 db.query(sql, [email], async (err, results) => {
                                     res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-                                    
+
                                     if (err) {
                                         console.error('Database error:', err);
                                         res.writeHead(500);
@@ -141,15 +141,15 @@ class Main {
                                     }
 
                                     const user = results[0];
-                                    
+
                                     // Compare password with hashed password
                                     const passwordMatch = await bcrypt.compare(password, user.password);
 
                                     if (passwordMatch) {
                                         res.writeHead(200);
-                                        res.end(JSON.stringify({ 
+                                        res.end(JSON.stringify({
                                             message: "Sign in successful",
-                                            email: user.email 
+                                            email: user.email
                                         }));
                                     } else {
                                         res.writeHead(401);
@@ -165,7 +165,7 @@ class Main {
                         }
                     });
                     break;
-                
+
                 default:
                     res.writeHead(404, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
                     res.end(JSON.stringify({ error: "Not Found" }));

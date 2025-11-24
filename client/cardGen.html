@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/cardGen.css">
 </head>
+
 <body>
     <header>
         <nav class="container">
@@ -22,16 +24,10 @@
     <div class="container">
         <div class="upload-container">
             <h1>Upload Your File</h1>
-            
+
             <form class="upload-form" id="uploadForm">
                 <div class="file-input-wrapper" id="fileDropZone">
-                    <input 
-                        type="file" 
-                        id="fileInput" 
-                        name="file"
-                        accept=".pdf,.txt,.docx,.xlsx,.pptx"
-                        required
-                    >
+                    <input type="file" id="fileInput" name="file" accept=".pdf,.txt,.docx,.xlsx,.pptx" required>
                     <div class="file-input-label">
                         <div class="file-icon">📁</div>
                         <div>
@@ -67,4 +63,5 @@
     <script src="js/UploadFileFormHandler.js"></script>
     <script src="js/ResponseDisplay.js"></script>
 </body>
+
 </html>

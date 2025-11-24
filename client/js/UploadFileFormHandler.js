@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fileDropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         fileDropZone.classList.remove('drag-over');
-        
+
         const files = e.dataTransfer.files;
         if (files.length > 0) {
             fileInput.files = files;
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function handleFileSelect() {
         const file = fileInput.files[0];
-        
+
         if (!file) {
             hideMessages();
             fileInfo.classList.remove('show');
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const file = fileInput.files[0];
         if (!file) {
             showError('Please select a file');
@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(result);
 
                 ResponseDisplay.displayResponse(result);
-                
+
             } else {
                 throw new Error('Upload failed');
             }
@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Generate Cards';
-            
+
         }
     });
 });

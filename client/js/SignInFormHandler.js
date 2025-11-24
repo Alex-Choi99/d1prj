@@ -77,7 +77,7 @@ class SignInFormHandler extends FormHandler {
     validateForm() {
         this.clearErrors();
         this.hideMessage(this.messages.error);
-        
+
         return this.validateEmailField() && this.validatePasswordField();
     }
 
@@ -176,7 +176,7 @@ class SignInFormHandler extends FormHandler {
 
         if (this.validateForm()) {
             this.isSubmitting = true;
-            
+
             // Disable submit button
             const submitButton = this.form.querySelector('button[type="submit"]');
             const originalButtonText = submitButton ? submitButton.textContent : '';
@@ -190,16 +190,16 @@ class SignInFormHandler extends FormHandler {
                 password: this.inputs.password.value
             };
             try {
-                const response = await fetch('http://localhost:3000/signin', {
+                const response = await fetch('https://d1prj.onrender.com/signin', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
                 const result = await response.json();
-                if(!response.ok){
+                if (!response.ok) {
                     this.handleFailedLogin(result.error || 'Sign in Error');
-                    
+
                     // Re-enable button on error
                     if (submitButton) {
                         submitButton.disabled = false;
@@ -209,13 +209,13 @@ class SignInFormHandler extends FormHandler {
                     return;
                 }
 
-                this.handleSuccessfulLogin({email: result.email});
+                this.handleSuccessfulLogin({ email: result.email });
                 // Don't re-enable button since we're redirecting
             }
             catch (error) {
                 console.error('Sign in error:', error);
                 this.handleFailedLogin('Network Error. Please try again.');
-                
+
                 // Re-enable button on error
                 if (submitButton) {
                     submitButton.disabled = false;

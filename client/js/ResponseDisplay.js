@@ -2,7 +2,7 @@
  * Handles displaying API responses
  */
 class ResponseDisplay {
-    
+
     /**
      * Display the AI response on the page
      * @param {Object} response - The API response object

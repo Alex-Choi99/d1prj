@@ -87,7 +87,7 @@ class SignUpFormHandler extends FormHandler {
      */
     validateForm() {
         this.clearErrors();
-        
+
         const validations = [
             this.validateEmailField(),
             this.validatePassword(),
@@ -96,7 +96,7 @@ class SignUpFormHandler extends FormHandler {
 
         return validations.every(isValid => isValid);
     }
-    
+
     /**
      * Handle Form Submission
      */
@@ -108,7 +108,7 @@ class SignUpFormHandler extends FormHandler {
 
         if (this.validateForm()) {
             this.isSubmitting = true;
-            
+
             // Disable submit button
             const submitButton = this.form.querySelector('button[type="submit"]');
             const originalButtonText = submitButton ? submitButton.textContent : '';
@@ -123,9 +123,9 @@ class SignUpFormHandler extends FormHandler {
             };
 
             try {
-                const response = await fetch('http://localhost:3000/signup', {
+                const response = await fetch('https://d1prj.onrender.com/signup', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
@@ -135,12 +135,12 @@ class SignUpFormHandler extends FormHandler {
                 console.log('Response status:', response.status); // Debug log
 
                 if (!response.ok) {
-                    if(response.status === 409){
+                    if (response.status === 409) {
                         this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, 'Email already in use');
                     } else {
                         this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, result.message || 'Sign up Failed');
                     }
-                    
+
                     // Re-enable button on error
                     if (submitButton) {
                         submitButton.disabled = false;
@@ -149,22 +149,22 @@ class SignUpFormHandler extends FormHandler {
                     this.isSubmitting = false;
                     return;
                 }
-                
+
                 console.log('Signup successful, setting session...'); // Debug log
                 sessionStorage.setItem('isLoggedIn', 'true');
                 sessionStorage.setItem('userEmail', payload.email);
 
                 // Prevent any further submissions by disabling the form
                 this.form.style.pointerEvents = 'none';
-                
+
                 this.showMessage(this.messages.success);
                 this.redirectAfterDelay(Constants.PAGE_LANDING); // Changed to landing page since user is logged in
                 // Don't re-enable button since we're redirecting
             }
-            catch (error){
+            catch (error) {
                 this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, 'Network Error');
                 console.error('Sign up error:', error);
-                
+
                 // Re-enable button on error
                 if (submitButton) {
                     submitButton.disabled = false;

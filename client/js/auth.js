@@ -82,12 +82,12 @@ class Auth {
         }
 
         // Page-specific logic
-        switch(currentPage) {
+        switch (currentPage) {
             case 'signin.html':
                 this.redirectIfLoggedIn();
                 new SignInFormHandler();
                 break; // Added missing break!
-                
+
             case 'signup.html':
                 this.redirectIfLoggedIn();
                 new SignUpFormHandler();

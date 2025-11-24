@@ -42,7 +42,7 @@ class FormHandler {
     clearErrors() {
         const errorMessages = document.querySelectorAll(Constants.CSS_SELECTOR_ERROR_MESSAGE);
         const inputs = document.querySelectorAll('input');
-        
+
         errorMessages.forEach(error => error.classList.remove(Constants.CSS_CLASS_SHOW));
         inputs.forEach(input => input.classList.remove(Constants.CSS_CLASS_ERROR));
     }
