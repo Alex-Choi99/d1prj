@@ -139,6 +139,9 @@ class SignUpFormHandler extends FormHandler {
                 if (!response.ok) {
                     if (response.status === 409) {
                         this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, 'Email already in use');
+                    } else if (response.status === 500) {
+                        console.error('Server error 500:', result); // Debug
+                        this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, 'Server error. Please try again later.');
                     } else {
                         this.showError(Constants.ERROR_ID_EMAIL, this.inputs.email, result.message || 'Sign up Failed');
                     }
