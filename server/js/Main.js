@@ -3,23 +3,6 @@ const mysql = require('mysql');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 
-<<<<<<< HEAD
-const DB_HOST = process.env.DB_HOST;
-const DB_USER = process.env.DB_USER;
-const DB_PASSWORD = process.env.DB_PASSWORD;
-const DB_NAME = process.env.DB_NAME;
-const PORT = 3000;
-const HEADER_CONTENT_TYPE = "Content-Type";
-const HEADER_JSON_CONTENT = "application/json";
-const GET = "GET";
-const POST = "POST";
-const OPTIONS = "OPTIONS";
-const DATA = "data";
-const END = "end";
-const ALL = "*";
-const BODY_DEFAULT = "";
-const DB_CONNECTION_MSG = "Connected to database.\n";
-=======
 const DB_HOST               = process.env.DB_HOST;
 const DB_USER               = process.env.DB_USER;
 const DB_PASSWORD           = process.env.DB_PASSWORD;
@@ -36,21 +19,14 @@ const ALL                   = "*";
 const BODY_DEFAULT          = "";
 const END                   = "end";
 const DB_CONNECTION_MSG     = "Connected to database.\n";
->>>>>>> origin/main
 const CORS = {
     ORIGIN: 'Access-Control-Allow-Origin',
     METHODS: 'Access-Control-Allow-Methods',
     HEADERS: 'Access-Control-Allow-Headers'
 };
-<<<<<<< HEAD
-const POST_FAIL_MSG = "Data insertion failed.\n";
-const POST_SUCCESS_MSG = "Account created successfully.\n";
-const GET_FAIL_MSG = "Data retrieval failed.\n";
-=======
 const POST_FAIL_MSG     = "Data insertion failed.\n";
 const POST_SUCCESS_MSG  = "Data inserted successfully.\n";
 const GET_FAIL_MSG      = "Data retrieval failed.\n";
->>>>>>> origin/main
 
 /**
  * Runs the program
