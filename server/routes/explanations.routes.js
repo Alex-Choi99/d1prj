@@ -1,0 +1,141 @@
+const express = require('express');
+const router = express.Router();
+
+/**
+ * @swagger
+ * /api/explanations:
+ *   post:
+ *     summary: Create a new explanation
+ *     tags: [Explanations]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateExplanationRequest'
+ *     responses:
+ *       201:
+ *         description: Explanation created successfully
+ */
+router.post("/explanations", (req, res) => {
+    res.status(201).send("Explanation created");
+});
+
+/**
+ * @swagger
+ * /api/explanations/{id}/regenerate:
+ *   post:
+ *     summary: Regenerate an existing explanation
+ *     tags: [Explanations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Explanation regenerated
+ */
+router.post("/:id/regenerate", (req, res) => {
+  res.status(200).send("Explanation regenerated");
+});
+
+/**
+ * @swagger
+ * /api/explanations:
+ *   get:
+ *     summary: Get all explanations
+ *     tags: [Explanations]
+ *     responses:
+ *       200:
+ *         description: List of all explanations
+ */
+router.get("/explanations", (req, res) => {
+    res.status(200).send("List of all explanations");
+});
+
+/**
+ * @swagger
+ * /api/explanations/{id}:
+ *   get:
+ *     summary: Get a single explanation by ID
+ *     tags: [Explanations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Explanation details
+ */
+router.get("/:id", (req, res) => {
+    res.status(200).send("Explanation details");
+});
+
+/**
+ * @swagger
+ * /api/explanations/difficulty/{level}:
+ *   get:
+ *     summary: Get explanations filtered by difficulty
+ *     tags: [Explanations]
+ *     parameters:
+ *       - in: path
+ *         name: level
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [easy, medium, hard]
+ *     responses:
+ *       200:
+ *         description: List of explanations with that difficulty
+ */
+router.get("/difficulty/:level", (req, res) => {
+    res.status(200).send("List of explanations with that difficulty");
+});
+
+/**
+ * @swagger
+ * /api/explanations/{id}:
+ *   put:
+ *     summary: Update an explanation
+ *     tags: [Explanations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               explanation:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Explanation updated
+ */
+router.put("/:id", (req, res) => {
+  res.json({ message: "Explanation updated" });
+});
+
+/**
+ * @swagger
+ * /api/explanations/{id}:
+ *   delete:
+ *     summary: Delete an explanation
+ *     tags: [Explanations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     responses:
+ *       204:
+ *         description: Explanation deleted
+ */
+router.delete("/:id", (req, res) => {
+    res.status(204).send();
+});
+
+module.exports = router;
