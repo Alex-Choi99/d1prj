@@ -4,6 +4,7 @@
 
 class AdminPanel {
     constructor() {
+        console.log('AdminPanel constructor called');
         this.users = [];
         this.selectedUsers = new Set();
         this.pendingAction = null;
@@ -11,7 +12,9 @@ class AdminPanel {
         this.SERVER_URL = Constants.URL_SERVER.replace(/\/+$/, ''); // Remove trailing slash if any
         
         this.initializeElements();
+        console.log('Elements initialized:', this.elements);
         this.showInitialPasswordModal();
+        console.log('Initial password modal should be shown');
         this.attachEventListeners();
     }
 
@@ -53,8 +56,20 @@ class AdminPanel {
      * Show initial password modal on first access
      */
     showInitialPasswordModal() {
-        this.elements.initialPasswordModal.style.display = 'flex';
-        this.elements.adminContent.style.display = 'none';
+        console.log('showInitialPasswordModal called');
+        console.log('initialPasswordModal element:', this.elements.initialPasswordModal);
+        console.log('adminContent element:', this.elements.adminContent);
+        
+        if (this.elements.initialPasswordModal) {
+            this.elements.initialPasswordModal.style.display = 'flex';
+            console.log('Modal display set to flex');
+        } else {
+            console.error('initialPasswordModal element not found!');
+        }
+        
+        if (this.elements.adminContent) {
+            this.elements.adminContent.style.display = 'none';
+        }
     }
 
     /**
@@ -368,6 +383,9 @@ class AdminPanel {
 
 // Initialize admin panel when page loads
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded event fired');
     Auth.init();
+    console.log('Auth initialized');
     new AdminPanel();
+    console.log('AdminPanel instance created');
 });

@@ -17,6 +17,7 @@ const DELETE                = "DELETE";
 const PUT                   = "PUT";
 const DATA                  = "data";
 const ALL                   = "*";
+const CLIENT_ORIGIN        = "http://localhost:8000";
 const BODY_DEFAULT          = "";
 const END                   = "end";
 const DB_CONNECTION_MSG     = "Connected to database.\n";
@@ -32,6 +33,11 @@ const SERVER_ERROR_MSG = "Server error.\n";
 const EMAIL_ALREADY_IN_USE_MSG = "Email already in use.\n";
 const INVALID_INPUT_MSG = "Invalid email or password.\n";
 const NOT_FOUND_MSG = "Not Found.\n";
+const SESSION_COOKIE_NAME = 'session_token';
+const SESSION_EXPIRY_DAYS = 7;
+
+// In-memory session store (for production, use Redis or database)
+const sessions = new Map();
 
 /**
  * Runs the program
@@ -39,22 +45,89 @@ const NOT_FOUND_MSG = "Not Found.\n";
 class Main {
 
     /**
+     * Generate secure session token
+     */
+    static generateSessionToken() {
+        return require('crypto').randomBytes(32).toString('hex');
+    }
+
+    /**
+     * Set cookie header
+     */
+    static setCookie(res, name, value, maxAge) {
+        const expires = new Date(Date.now() + maxAge);
+        res.setHeader('Set-Cookie', 
+            `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge / 1000}; Expires=${expires.toUTCString()}`
+        );
+    }
+
+    /**
+     * Parse cookies from request
+     */
+    static parseCookies(req) {
+        const cookies = {};
+        const cookieHeader = req.headers.cookie;
+        
+        if (cookieHeader) {
+            cookieHeader.split(';').forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                cookies[name] = value;
+            });
+        }
+        
+        return cookies;
+    }
+
+    /**
+     * Validate session token
+     */
+    static validateSession(token) {
+        const session = sessions.get(token);
+        
+        if (!session) {
+            return null;
+        }
+        
+        // Check if session expired
+        if (Date.now() > session.expiresAt) {
+            sessions.delete(token);
+            return null;
+        }
+        
+        return session;
+    }
+
+    /**
+     * Get user ID from session
+     */
+    static getUserIdFromSession(req) {
+        const cookies = this.parseCookies(req);
+        const token = cookies[SESSION_COOKIE_NAME];
+        const session = this.validateSession(token);
+        return session ? session.userId : null;
+    }
+
+    /**
      * Entry Point
      */
     static main() {
-        const db = mysql.createConnection({
+        const db = mysql.createPool({
             host: DB_HOST,
             user: DB_USER,
             password: DB_PASSWORD,
-            database: DB_NAME
+            database: DB_NAME,
+            connectionLimit: 10,
+            waitForConnections: true,
+            queueLimit: 0
         });
 
-        db.connect((err) => {
+        db.getConnection((err, connection) => {
             if (err) {
                 throw err;
             }
 
             console.log(DB_CONNECTION_MSG);
+            connection.release();
         });
 
         this.runServer(db);
@@ -65,25 +138,67 @@ class Main {
      */
     static runServer(db) {
         const server = http.createServer((req, res) => {
-            res.setHeader(CORS.ORIGIN, ALL);
-            res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${OPTIONS}`);
-            res.setHeader(CORS.HEADERS, HEADER_CONTENT_TYPE);
-
-            if (req.method === OPTIONS){
-                res.writeHead(200, {
-                    [CORS.ORIGIN]: ALL,
-                    [CORS.METHODS]: `${GET}, ${POST}, ${OPTIONS}`,
-                    [CORS.HEADERS]: HEADER_CONTENT_TYPE
-                });
-                res.end();
-                return;
-
-            }
             switch (req.method) {
+                case OPTIONS:
+                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
+                    res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${PUT}, ${DELETE}, ${OPTIONS}`);
+                    res.setHeader(CORS.HEADERS, `${HEADER_CONTENT_TYPE}, Cookie`);
+                    res.setHeader('Access-Control-Allow-Credentials', 'true');
+                    res.end();
+                    break;
+
+                case GET:
+                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
+                    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+                    if (req.url === '/verify-session') {
+                        const cookies = this.parseCookies(req);
+                        const token = cookies[SESSION_COOKIE_NAME];
+                        const session = this.validateSession(token);
+
+                        res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                        if (session) {
+                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({
+                                valid: true,
+                                email: session.email,
+                                userId: session.userId
+                            }));
+                        } else {
+                            res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ valid: false }));
+                        }
+                    } else if (req.url === '/admin/users') {
+                        const sql = `SELECT id, email, password, userType FROM user`;
+
+                        db.query(sql, (err, results) => {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                            if (err) {
+                                console.error('Database error:', err);
+                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                return;
+                            }
+
+                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ users: results }));
+                        });
+                    } else {
+                        res.writeHead(404, { 
+                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                        });
+                        res.end(JSON.stringify({ error: NOT_FOUND_MSG }));
+                    }
+                    break;
+
                 case POST:
                     let body = BODY_DEFAULT;
 
-                    res.setHeader(CORS.ORIGIN, ALL);
+                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
+                    res.setHeader('Access-Control-Allow-Credentials', 'true');
                     req.on(DATA, chunk => body += chunk.toString());
 
                     req.on(END, () => {
@@ -94,7 +209,10 @@ class Main {
 
                             if (req.url === '/signup') {
                                 if (!this.validateEmail(email)) {
-                                    res.writeHead(400, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT});
+                                    res.writeHead(400, { 
+                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                        [CORS.ORIGIN]: CLIENT_ORIGIN
+                                    });
                                     res.end(JSON.stringify({ message: INVALID_EMAIL_MSG }));
                                     return;
                                 }
@@ -103,7 +221,10 @@ class Main {
 
                                 db.query(checkEmailSql, [email], async (err, results) => {
                                     if (results.length > 0) {
-                                        res.writeHead(409, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT});
+                                        res.writeHead(409, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
                                         res.end(JSON.stringify({ message: EMAIL_ALREADY_IN_USE_MSG }));
                                         return;
                                     }
@@ -112,7 +233,7 @@ class Main {
                                         console.error('Database error:', err);
                                         res.writeHead(500, { 
                                             [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: ALL
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
                                         });
                                         res.end(JSON.stringify({ error: err })); 
                                         return;
@@ -126,10 +247,10 @@ class Main {
 
                                         if (err) {
                                             console.error('Database error:', err);
-                                            res.writeHead(400, { [CORS.ORIGIN]: ALL });
+                                            res.writeHead(400, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                                             res.end(JSON.stringify({ message: POST_FAIL_MSG }));
                                         } else {
-                                            res.writeHead(200, { [CORS.ORIGIN]: ALL });
+                                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                                             res.end(JSON.stringify({
                                                 message: POST_SUCCESS_MSG,
                                                 userId: result.insertId
@@ -145,13 +266,13 @@ class Main {
 
                                     if (err) {
                                         console.error('Database error:', err);
-                                        res.writeHead(500, { [CORS.ORIGIN]: ALL });
+                                        res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                                         res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
                                         return;
                                     }
 
                                     if (results.length === 0) {
-                                        res.writeHead(401, { [CORS.ORIGIN]: ALL });
+                                        res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                                         res.end(JSON.stringify({ error: INVALID_INPUT_MSG }));
                                         return;
                                     }
@@ -162,16 +283,94 @@ class Main {
                                     const passwordMatch = await bcrypt.compare(password, user.password);
 
                                     if (passwordMatch) {
-                                        res.writeHead(200, { [CORS.ORIGIN]: ALL });
+                                        // Generate session token
+                                        const sessionToken = this.generateSessionToken();
+                                        const maxAge = SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+                                        
+                                        // Store session
+                                        sessions.set(sessionToken, {
+                                            email: user.email,
+                                            userId: user.id,
+                                            createdAt: Date.now(),
+                                            expiresAt: Date.now() + maxAge
+                                        });
+
+                                        // Set cookie
+                                        this.setCookie(res, SESSION_COOKIE_NAME, sessionToken, maxAge);
+
+                                        res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                                         res.end(JSON.stringify({
                                             message: "Sign in successful",
                                             email: user.email,
-                                            userType: user.userType || 'user'
+                                            userType: user.userType || 'user',
+                                            userId: user.id
                                         }));
                                     } else {
-                                        res.writeHead(401, { [CORS.ORIGIN]: ALL });
+                                        res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                                         res.end(JSON.stringify({ error: INVALID_INPUT_MSG }) );
                                     }
+                                });
+                            } else if (req.url === '/create-card-group') {
+                                // Get user ID from session
+                                const userId = this.getUserIdFromSession(req);
+                                
+                                if (!userId) {
+                                    res.writeHead(401, { 
+                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                        [CORS.ORIGIN]: CLIENT_ORIGIN
+                                    });
+                                    res.end(JSON.stringify({ error: 'Not authenticated' }));
+                                    return;
+                                }
+
+                                const { name, description, cards } = parsed;
+
+                                if (!name || !Array.isArray(cards) || cards.length === 0) {
+                                    res.writeHead(400, { 
+                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                        [CORS.ORIGIN]: CLIENT_ORIGIN
+                                    });
+                                    res.end(JSON.stringify({ error: 'Invalid card group data' }));
+                                    return;
+                                }
+
+                                // Insert card group
+                                const groupSql = `INSERT INTO card_groups (user_id, name, description) VALUES (?, ?, ?)`;
+
+                                db.query(groupSql, [userId, name, description || ''], (err, groupResult) => {
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        res.writeHead(500, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
+                                        res.end(JSON.stringify({ error: 'Failed to create card group' }));
+                                        return;
+                                    }
+
+                                    const groupId = groupResult.insertId;
+
+                                    // Insert all cards
+                                    const cardSql = `INSERT INTO cards (group_id, question, answer) VALUES ?`;
+                                    const cardValues = cards.map(card => [groupId, card.question, card.answer]);
+
+                                    db.query(cardSql, [cardValues], (err, cardResult) => {
+                                        res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                                        if (err) {
+                                            console.error('Database error:', err);
+                                            res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                            res.end(JSON.stringify({ error: 'Failed to create cards' }));
+                                            return;
+                                        }
+
+                                        res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                        res.end(JSON.stringify({
+                                            message: 'Card group created successfully',
+                                            groupId: groupId,
+                                            cardsCreated: cardResult.affectedRows
+                                        }));
+                                    });
                                 });
                             }
                         }
@@ -179,42 +378,17 @@ class Main {
                             console.error('Server error:', error);
                             res.writeHead(500, { 
                                 [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                [CORS.ORIGIN]: ALL
+                                [CORS.ORIGIN]: CLIENT_ORIGIN
                             });
                             res.end(JSON.stringify({ error: "Server error" }));
                         }
                     });
                     break;
 
-                case GET:
-                    res.setHeader(CORS.ORIGIN, ALL);
-
-                    if (req.url === '/admin/users') {
-                        const sql = `SELECT id, email, password, userType FROM user`;
-
-                        db.query(sql, (err, results) => {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                            if (err) {
-                                console.error('Database error:', err);
-                                res.writeHead(500);
-                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                return;
-                            }
-
-                            res.writeHead(200);
-                            res.end(JSON.stringify({ users: results }));
-                        });
-                    } else {
-                        res.writeHead(404, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                        res.end(JSON.stringify({ error: NOT_FOUND_MSG }));
-                    }
-                    break;
-
                 case DELETE:
                     let deleteBody = BODY_DEFAULT;
 
-                    res.setHeader(CORS.ORIGIN, ALL);
+                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
                     req.on(DATA, chunk => deleteBody += chunk.toString());
 
                     req.on(END, async () => {
@@ -269,7 +443,7 @@ class Main {
                 case PUT:
                     let putBody = BODY_DEFAULT;
 
-                    res.setHeader(CORS.ORIGIN, ALL);
+                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
                     req.on(DATA, chunk => putBody += chunk.toString());
 
                     req.on(END, async () => {
@@ -325,7 +499,7 @@ class Main {
                 default:
                     res.writeHead(404, { 
                         [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                        [CORS.ORIGIN]: ALL
+                        [CORS.ORIGIN]: CLIENT_ORIGIN
                     });
                     res.end(JSON.stringify({ error: NOT_FOUND_MSG }) );
             }

@@ -1,12 +1,13 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 const router = express.Router();
 
 /**
  * @swagger
- * /api/auth/login:
+ * /api/auth/generate-explanation-token:
  *   post:
- *     summary: Login to get JWT token (HttpOnly cookie)
+ *     summary: Generate JWT token for creating/regenerating AI explanations
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -15,26 +16,57 @@ const router = express.Router();
  *           schema:
  *             type: object
  *             properties:
- *               username:
+ *               explanationId:
  *                 type: string
- *               password:
+ *                 description: ID of explanation (for regeneration)
+ *               difficulty:
  *                 type: string
+ *                 enum: [easy, medium, hard]
+ *                 description: Difficulty level for the explanation
+ *               context:
+ *                 type: object
+ *                 description: Additional context (topic, user preferences, etc.)
  *     responses:
  *       200:
- *         description: Successful login
+ *         description: Explanation token generated
+ *       400:
+ *         description: Invalid request
  */
-router.post("/login", (req, res) => {
-    const token = jwt.sign({user: "example"}, "secret", {
-        expiresIn: '1h'
-    });
+router.post("/generate_explanation_token", (req, res) => {
+    try
+    {
+        const { explanationId, difficulty, context } = req.body;
 
-    res.cookie("token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-    });
+        if (!difficulty || !['easy', 'medium', 'hard'].includes(difficulty)) {
+            return res.status(400).send("Invalid difficulty level");
+        }
 
-    res.status(200).send("Login successful");
+        const token = jwt.sign(
+            {
+                type: "explanation",
+                explanationId: explanationId || null,
+                difficulty: difficulty,
+                context: context || {}
+            },
+            process.env.JWT_SECRET,
+            { 
+                expiresIn: '24h'
+            }
+        );
+        res.cookie("explanation_token", token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Strict',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
+        res.status(200).json({
+            message: "Explanation token generated",
+            expiresIn: '24h'
+        });
+    } catch (error) {
+        console.error("Error generating explanation token:", error);
+        res.status(500).send("Server error");
+    }
 });
 
 module.exports = router;

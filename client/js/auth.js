@@ -121,6 +121,7 @@ class Auth {
                 break;
 
             case 'cardGen.html':
+                console.log('Card Generation page - requiring login');
                 this.requireLogin();
                 break;
 
