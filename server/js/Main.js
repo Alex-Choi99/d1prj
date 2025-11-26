@@ -63,14 +63,21 @@ class Main {
      */
     static runServer(db) {
         const server = http.createServer((req, res) => {
-            switch (req.method) {
-                case OPTIONS:
-                    res.setHeader(CORS.ORIGIN, ALL);
-                    res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${OPTIONS}`);
-                    res.setHeader(CORS.HEADERS, HEADER_CONTENT_TYPE);
-                    res.end();
-                    break;
+            res.setHeader(CORS.ORIGIN, ALL);
+            res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${OPTIONS}`);
+            res.setHeader(CORS.HEADERS, HEADER_CONTENT_TYPE);
 
+            if (req.method === OPTIONS){
+                res.writeHead(200, {
+                    [CORS.ORIGIN]: ALL,
+                    [CORS.METHODS]: `${GET}, ${POST}, ${OPTIONS}`,
+                    [CORS.HEADERS]: HEADER_CONTENT_TYPE
+                });
+                res.end();
+                return;
+
+            }
+            switch (req.method) {
                 case POST:
                     let body = BODY_DEFAULT;
 
@@ -85,10 +92,7 @@ class Main {
 
                             if (req.url === '/signup') {
                                 if (!this.validateEmail(email)) {
-                                    res.writeHead(400, { 
-                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                        [CORS.ORIGIN]: ALL
-                                    });
+                                    res.writeHead(400, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT});
                                     res.end(JSON.stringify({ message: INVALID_EMAIL_MSG }));
                                     return;
                                 }
@@ -97,10 +101,7 @@ class Main {
 
                                 db.query(checkEmailSql, [email], async (err, results) => {
                                     if (results.length > 0) {
-                                        res.writeHead(409, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: ALL
-                                        });
+                                        res.writeHead(409, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT});
                                         res.end(JSON.stringify({ message: EMAIL_ALREADY_IN_USE_MSG }));
                                         return;
                                     }
