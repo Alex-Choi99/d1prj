@@ -205,10 +205,9 @@ class SignInFormHandler extends FormHandler {
                 this.handleRememberMe();
                 this.showMessage(this.messages.success);
                 
-                // Redirect to appropriate page
-                const redirectUrl = result.userType === 'admin' ? 'admin.html' : 'index.html';
+                // Redirect to home page
                 setTimeout(() => {
-                    window.location.href = redirectUrl;
+                    window.location.href = 'index.html';
                 }, Constants.REDIRECT_DELAY);
                 // Don't re-enable button since we're redirecting
             }
