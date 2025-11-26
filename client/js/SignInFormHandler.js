@@ -82,26 +82,6 @@ class SignInFormHandler extends FormHandler {
     }
 
     /**
-     * Retrieve Stored User from Local Storage
-     * @returns stored user object or null
-     */
-    // getStoredUser() {
-    //     const userData = localStorage.getItem(Constants.STORAGE_KEY_USER);
-    //     return userData ? JSON.parse(userData) : null;
-    // }
-
-    // /**
-    //  * Verify Credentials
-    //  * @param {*} storedUser | stored user object
-    //  * @returns true if credentials match, false otherwise
-    //  */
-    // verifyCredentials(storedUser) {
-    //     return storedUser &&
-    //            storedUser[Constants.USER_FIELD_EMAIL] === this.inputs.email.value &&
-    //            storedUser[Constants.USER_FIELD_PASSWORD] === this.inputs.password.value;
-    // }
-
-    /**
      * Handle Remember Me Functionality
      */
     handleRememberMe() {
@@ -193,6 +173,7 @@ class SignInFormHandler extends FormHandler {
                 const response = await fetch('http://localhost:3001/signin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // Send and receive cookies
                     body: JSON.stringify(payload)
                 });
                 // const response = await fetch('https://d1prj.onrender.com/signin', {
