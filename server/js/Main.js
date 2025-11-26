@@ -116,7 +116,7 @@ class Main {
                                         return;
                                     }
 
-                                    const hashedPassword = await bcrypt.hash(password, 10);
+                                    const hashedPassword = await bcrypt.hash(password, 8);
                                     const insertSql = `INSERT INTO user (email, password) VALUES (?, ?)`;
 
                                     db.query(insertSql, [email, hashedPassword], (err, result) => {

@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Uploading...';
 
         try {
-            const response = await fetch("https://d1prj-1.onrender.com/", {
+            const response = await fetch("{URL_MODEL}", {
                 method: "POST",
                 body: formData
             });

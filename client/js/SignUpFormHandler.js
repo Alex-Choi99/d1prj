@@ -1,5 +1,3 @@
-const SERVER = 'https://d1prj.onrender.com/';
-
 /**
  * Sign-Up Form Handler Class
  */
