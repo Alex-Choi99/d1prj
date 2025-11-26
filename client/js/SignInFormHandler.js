@@ -191,7 +191,7 @@ class SignInFormHandler extends FormHandler {
                 password: this.inputs.password.value
             };
             try {
-                const response = await fetch('http://localhost:3001/signin', {
+                const response = await fetch(`${Constants.URL_SERVER}/signin`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -213,6 +213,16 @@ class SignInFormHandler extends FormHandler {
                     }
                     this.isSubmitting = false;
                     return;
+                } else if (response.ok) {
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    sessionStorage.setItem('userEmail', result.email);
+                    sessionStorage.setItem('userType', result.userType);
+                    
+                    this.responseDisplay.showSuccess('Sign in successful! Redirecting...');
+                    
+                    setTimeout(() => {
+                        window.location.href = result.userType === 'admin' ? 'admin.html' : 'index.html';
+                    }, Constants.REDIRECT_DELAY);
                 }
 
                 this.handleSuccessfulLogin({ email: result.email, userType: result.userType });

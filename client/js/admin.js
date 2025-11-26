@@ -2,14 +2,13 @@
  * Admin Panel JavaScript
  */
 
-const SERVER_URL = 'https://d1prj.onrender.com';
-
 class AdminPanel {
     constructor() {
         this.users = [];
         this.selectedUsers = new Set();
         this.pendingAction = null;
         this.adminVerified = false;
+        this.SERVER_URL = Constants.URL_SERVER.replace(/\/+$/, ''); // Remove trailing slash if any
         
         this.initializeElements();
         this.showInitialPasswordModal();
@@ -134,8 +133,13 @@ class AdminPanel {
         const password = this.elements.initialPasswordInput.value;
         const email = Auth.getUserEmail();
 
+        const submitBtn = this.elements.initialPasswordForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Verifying...';
+
         try {
-            const response = await fetch(`${SERVER_URL}/signin`, {
+            const response = await fetch(`${this.SERVER_URL}/signin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
@@ -151,6 +155,9 @@ class AdminPanel {
         } catch (error) {
             console.error('Verification error:', error);
             this.elements.initialPasswordError.textContent = 'Network error. Please try again.';
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
         }
     }
 
@@ -163,7 +170,7 @@ class AdminPanel {
         this.elements.usersTableBody.innerHTML = '';
 
         try {
-            const response = await fetch(`${SERVER_URL}/admin/users`);
+            const response = await fetch(`${this.SERVER_URL}/admin/users`);
             const result = await response.json();
 
             if (response.ok) {
@@ -303,7 +310,7 @@ class AdminPanel {
         try {
             const userIds = Array.from(this.selectedUsers);
             const promises = userIds.map(userId => 
-                fetch(`${SERVER_URL}/admin/users`, {
+                fetch(`${this.SERVER_URL}/admin/users`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId, adminEmail, adminPassword })
@@ -335,7 +342,7 @@ class AdminPanel {
         try {
             const userIds = Array.from(this.selectedUsers);
             const promises = userIds.map(userId => 
-                fetch(`${SERVER_URL}/admin/users`, {
+                fetch(`${this.SERVER_URL}/admin/users`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId, userType: 'admin', adminEmail, adminPassword })
