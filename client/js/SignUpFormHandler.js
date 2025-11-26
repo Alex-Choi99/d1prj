@@ -125,8 +125,8 @@ class SignUpFormHandler extends FormHandler {
             };
 
             try {
-                // const response = await fetch('http://localhost:3001/signup', {
-                const response = await fetch('https://d1prj.onrender.com/signup', {
+                const response = await fetch('http://localhost:3001/signup', {
+                // const response = await fetch('https://d1prj.onrender.com/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)

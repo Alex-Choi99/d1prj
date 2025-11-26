@@ -82,26 +82,6 @@ class SignInFormHandler extends FormHandler {
     }
 
     /**
-     * Retrieve Stored User from Local Storage
-     * @returns stored user object or null
-     */
-    // getStoredUser() {
-    //     const userData = localStorage.getItem(Constants.STORAGE_KEY_USER);
-    //     return userData ? JSON.parse(userData) : null;
-    // }
-
-    // /**
-    //  * Verify Credentials
-    //  * @param {*} storedUser | stored user object
-    //  * @returns true if credentials match, false otherwise
-    //  */
-    // verifyCredentials(storedUser) {
-    //     return storedUser &&
-    //            storedUser[Constants.USER_FIELD_EMAIL] === this.inputs.email.value &&
-    //            storedUser[Constants.USER_FIELD_PASSWORD] === this.inputs.password.value;
-    // }
-
-    /**
      * Handle Remember Me Functionality
      */
     handleRememberMe() {
