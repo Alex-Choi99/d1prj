@@ -39,4 +39,10 @@ class Constants {
     static USER_FIELD_PASSWORD = 'password';
 
     static ERROR_SUFFIX = 'Error';
+
+    static URL_SERVER = "http://localhost:3001/";
+    // static URL_SERVER = "https://d1prj-server.onrender.com/";
+    static URL_CLIENT = "https://d1prj-client.onrender.com/";
+    static URL_MODEL = "https://d1prj-model.onrender.com/";
+    static URL_API = "https://d1prj-api.onrender.com/";
 }

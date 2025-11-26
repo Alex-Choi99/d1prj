@@ -176,6 +176,11 @@ class SignInFormHandler extends FormHandler {
                     credentials: 'include', // Send and receive cookies
                     body: JSON.stringify(payload)
                 });
+                // const response = await fetch('https://d1prj.onrender.com/signin', {
+                //     method: 'POST',
+                //     headers: { 'Content-Type': 'application/json' },
+                //     body: JSON.stringify(payload)
+                // });
 
                 const result = await response.json();
                 if (!response.ok) {

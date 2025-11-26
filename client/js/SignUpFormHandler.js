@@ -1,5 +1,3 @@
-const SERVER = 'https://d1prj.onrender.com/';
-
 /**
  * Sign-Up Form Handler Class
  */
@@ -131,6 +129,11 @@ class SignUpFormHandler extends FormHandler {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                // const response = await fetch('https://d1prj.onrender.com/signup', {
+                //     method: 'POST',
+                //     headers: { 'Content-Type': 'application/json' },
+                //     body: JSON.stringify(payload)
+                // });
 
                 const result = await response.json();
 
