@@ -74,8 +74,7 @@ class Main {
                     [CORS.HEADERS]: HEADER_CONTENT_TYPE
                 });
                 res.end();
-                return;
-
+                return;     
             }
             switch (req.method) {
                 case POST:
