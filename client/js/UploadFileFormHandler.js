@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Uploading...';
 
         try {
-            const response = await fetch("", {
+            const response = await fetch("{URL_MODEL}", {
                 method: "POST",
                 body: formData
             });
