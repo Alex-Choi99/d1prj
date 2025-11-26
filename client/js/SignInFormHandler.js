@@ -144,11 +144,12 @@ class SignInFormHandler extends FormHandler {
     /**
      * Handle Successful Login
      */
-    handleSuccessfulLogin() {
+    handleSuccessfulLogin(userData) {
         this.handleRememberMe();
 
         sessionStorage.setItem('isLoggedIn', 'true');
-        sessionStorage.setItem('userEmail', this.inputs.email.value);
+        sessionStorage.setItem('userEmail', userData.email);
+        sessionStorage.setItem('userType', userData.userType || 'user');
 
         this.showMessage(this.messages.success);
         this.redirectAfterDelay(Constants.PAGE_LANDING);
@@ -190,7 +191,7 @@ class SignInFormHandler extends FormHandler {
                 password: this.inputs.password.value
             };
             try {
-                const response = await fetch('https://d1prj.onrender.com/signin', {
+                const response = await fetch(`${Constants.SERVER_URL}/signin`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -209,7 +210,7 @@ class SignInFormHandler extends FormHandler {
                     return;
                 }
 
-                this.handleSuccessfulLogin({ email: result.email });
+                this.handleSuccessfulLogin({ email: result.email, userType: result.userType });
                 // Don't re-enable button since we're redirecting
             }
             catch (error) {

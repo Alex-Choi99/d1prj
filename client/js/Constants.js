@@ -39,4 +39,5 @@ class Constants {
     static USER_FIELD_PASSWORD = 'password';
 
     static ERROR_SUFFIX = 'Error';
+    static SERVER_URL = 'https://d1prj.onrender.com';
 }

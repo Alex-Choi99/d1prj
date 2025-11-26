@@ -13,6 +13,8 @@ const HEADER_JSON_CONTENT   = "application/json";
 const GET                   = "GET";
 const POST                  = "POST";
 const OPTIONS               = "OPTIONS";
+const DELETE                = "DELETE";
+const PUT                   = "PUT";
 const DATA                  = "data";
 const ALL                   = "*";
 const BODY_DEFAULT          = "";
@@ -66,7 +68,7 @@ class Main {
             switch (req.method) {
                 case OPTIONS:
                     res.setHeader(CORS.ORIGIN, ALL);
-                    res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${OPTIONS}`);
+                    res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${PUT}, ${DELETE}, ${OPTIONS}`);
                     res.setHeader(CORS.HEADERS, HEADER_CONTENT_TYPE);
                     res.end();
                     break;
@@ -162,7 +164,8 @@ class Main {
                                         res.writeHead(200, { [CORS.ORIGIN]: ALL });
                                         res.end(JSON.stringify({
                                             message: "Sign in successful",
-                                            email: user.email
+                                            email: user.email,
+                                            userType: user.userType || 'user'
                                         }));
                                     } else {
                                         res.writeHead(401, { [CORS.ORIGIN]: ALL });
@@ -177,6 +180,142 @@ class Main {
                                 [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
                                 [CORS.ORIGIN]: ALL
                             });
+                            res.end(JSON.stringify({ error: "Server error" }));
+                        }
+                    });
+                    break;
+
+                case GET:
+                    res.setHeader(CORS.ORIGIN, ALL);
+
+                    if (req.url === '/admin/users') {
+                        const sql = `SELECT id, email, password, userType FROM user`;
+
+                        db.query(sql, (err, results) => {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                            if (err) {
+                                console.error('Database error:', err);
+                                res.writeHead(500);
+                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                return;
+                            }
+
+                            res.writeHead(200);
+                            res.end(JSON.stringify({ users: results }));
+                        });
+                    } else {
+                        res.writeHead(404, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                        res.end(JSON.stringify({ error: NOT_FOUND_MSG }));
+                    }
+                    break;
+
+                case DELETE:
+                    let deleteBody = BODY_DEFAULT;
+
+                    res.setHeader(CORS.ORIGIN, ALL);
+                    req.on(DATA, chunk => deleteBody += chunk.toString());
+
+                    req.on(END, async () => {
+                        try {
+                            const parsed = JSON.parse(deleteBody);
+                            const userId = parsed.userId;
+                            const adminEmail = parsed.adminEmail;
+                            const adminPassword = parsed.adminPassword;
+
+                            // Verify admin credentials
+                            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
+                            db.query(adminSql, [adminEmail], async (err, adminResults) => {
+                                res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                                if (err || adminResults.length === 0) {
+                                    res.writeHead(401);
+                                    res.end(JSON.stringify({ error: "Unauthorized" }));
+                                    return;
+                                }
+
+                                const admin = adminResults[0];
+                                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
+
+                                if (!passwordMatch) {
+                                    res.writeHead(401);
+                                    res.end(JSON.stringify({ error: "Invalid password" }));
+                                    return;
+                                }
+
+                                // Delete user
+                                const deleteSql = `DELETE FROM user WHERE id = ?`;
+                                db.query(deleteSql, [userId], (err, result) => {
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        res.writeHead(500);
+                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                        return;
+                                    }
+
+                                    res.writeHead(200);
+                                    res.end(JSON.stringify({ message: "User deleted successfully" }));
+                                });
+                            });
+                        } catch (error) {
+                            console.error('Server error:', error);
+                            res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+                            res.end(JSON.stringify({ error: "Server error" }));
+                        }
+                    });
+                    break;
+
+                case PUT:
+                    let putBody = BODY_DEFAULT;
+
+                    res.setHeader(CORS.ORIGIN, ALL);
+                    req.on(DATA, chunk => putBody += chunk.toString());
+
+                    req.on(END, async () => {
+                        try {
+                            const parsed = JSON.parse(putBody);
+                            const userId = parsed.userId;
+                            const newUserType = parsed.userType;
+                            const adminEmail = parsed.adminEmail;
+                            const adminPassword = parsed.adminPassword;
+
+                            // Verify admin credentials
+                            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
+                            db.query(adminSql, [adminEmail], async (err, adminResults) => {
+                                res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                                if (err || adminResults.length === 0) {
+                                    res.writeHead(401);
+                                    res.end(JSON.stringify({ error: "Unauthorized" }));
+                                    return;
+                                }
+
+                                const admin = adminResults[0];
+                                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
+
+                                if (!passwordMatch) {
+                                    res.writeHead(401);
+                                    res.end(JSON.stringify({ error: "Invalid password" }));
+                                    return;
+                                }
+
+                                // Update user type
+                                const updateSql = `UPDATE user SET userType = ? WHERE id = ?`;
+                                db.query(updateSql, [newUserType, userId], (err, result) => {
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        res.writeHead(500);
+                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                        return;
+                                    }
+
+                                    res.writeHead(200);
+                                    res.end(JSON.stringify({ message: "User type updated successfully" }));
+                                });
+                            });
+                        } catch (error) {
+                            console.error('Server error:', error);
+                            res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
                             res.end(JSON.stringify({ error: "Server error" }));
                         }
                     });
