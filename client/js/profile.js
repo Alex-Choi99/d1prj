@@ -78,7 +78,7 @@ class ProfilePage {
 
 // Initialize profile page when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    Auth.init();
+    // Auth.init();
     Auth.requireLogin();
     new ProfilePage();
 });

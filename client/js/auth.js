@@ -49,6 +49,7 @@ class Auth {
         const navLogout = document.getElementById('navLogout');
         const navAdmin = document.getElementById('navAdmin');
         const navProfile = document.getElementById('navProfile');
+        const navCardGen = document.getElementById('navCardGen');
         const userEmailSpan = document.getElementById('userEmail');
 
         if (this.isLoggedIn()) {
@@ -60,6 +61,7 @@ class Auth {
             if (navLogout) navLogout.style.display = 'block';
             if (navAdmin) navAdmin.style.display = this.isAdmin() ? 'block' : 'none';
             if (navProfile) navProfile.style.display = this.isAdmin() ? 'none' : 'block';
+            if (navCardGen) navCardGen.style.display = 'block';
         } else {
             if (navSignup) navSignup.style.display = 'block';
             if (navUserInfo) navUserInfo.style.display = 'none';
