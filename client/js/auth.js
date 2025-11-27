@@ -101,10 +101,8 @@ class Auth {
     static init() {
         const currentPage = window.location.pathname.split('/').pop();
 
-        // Update navigation for all pages
         this.updateNavigation();
 
-        // Handle logout button
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', (e) => {
@@ -113,12 +111,11 @@ class Auth {
             });
         }
 
-        // Page-specific logic
         switch (currentPage) {
             case 'signin.html':
                 this.redirectIfLoggedIn();
                 new SignInFormHandler();
-                break; // Added missing break!
+                break;
 
             case 'signup.html':
                 this.redirectIfLoggedIn();
@@ -136,11 +133,9 @@ class Auth {
 
             case 'index.html':
             case '':
-                // Index page - no restrictions
                 break;
 
             default:
-                // Other pages - update navigation only
                 break;
         }
     }
