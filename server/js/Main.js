@@ -16,8 +16,11 @@ const HEADER_JSON_CONTENT = "application/json";
 const GET = "GET";
 const POST = "POST";
 const OPTIONS = "OPTIONS";
+const DELETE = "DELETE";
+const PUT = "PUT";
 const DATA = "data";
 const ALL = "*";
+const CLIENT_ORIGIN = "http://localhost:8000";
 const BODY_DEFAULT = "";
 const END = "end";
 const DB_CONNECTION_MSG = "Connected to database.\n";
@@ -34,7 +37,6 @@ const SERVER_ERROR_MSG = "Server error.\n";
 const EMAIL_ALREADY_IN_USE_MSG = "Email already in use.\n";
 const INVALID_INPUT_MSG = "Invalid email or password.\n";
 const NOT_FOUND_MSG = "Not Found.\n";
-const SESSION_COOKIE_NAME = 'session_token';
 
 /**
  * Runs the program
@@ -68,21 +70,19 @@ class Main {
      */
     static runServer(db) {
         const server = http.createServer((req, res) => {
-            res.setHeader(CORS.ORIGIN, ALL);
-            res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${OPTIONS}`);
-            res.setHeader(CORS.HEADERS, HEADER_CONTENT_TYPE);
-
-            if (req.method === OPTIONS) {
-                res.writeHead(200, {
-                    [CORS.ORIGIN]: ALL,
-                    [CORS.METHODS]: `${GET}, ${POST}, ${OPTIONS}`,
-                    [CORS.HEADERS]: HEADER_CONTENT_TYPE
-                });
-                res.end();
-                return;
-            }
-
             switch (req.method) {
+                case OPTIONS:
+                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
+                    res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${PUT}, ${DELETE}, ${OPTIONS}`);
+                    res.setHeader(CORS.HEADERS, `${HEADER_CONTENT_TYPE}, Cookie`);
+                    res.setHeader('Access-Control-Allow-Credentials', 'true');
+                    res.end();
+                    break;
+
+                case GET:
+                    Main.handleGet(req, res, db);
+                    break;
+
                 case POST:
                     Main.handlePost(req, res, db);
                     break;
@@ -90,7 +90,7 @@ class Main {
                 default:
                     res.writeHead(404, {
                         [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                        [CORS.ORIGIN]: ALL
+                        [CORS.ORIGIN]: CLIENT_ORIGIN
                     });
                     res.end(JSON.stringify({ error: NOT_FOUND_MSG }));
             }
@@ -104,7 +104,7 @@ class Main {
     static handlePost(req, res, db) {
         let body = BODY_DEFAULT;
 
-        res.setHeader(CORS.ORIGIN, ALL);
+        res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
         req.on(DATA, chunk => body += chunk.toString());
 
         req.on(END, () => {
@@ -118,16 +118,34 @@ class Main {
                 } else if (req.url === '/signin') {
                     Main.signin(db, email, password, res);
                 }
+                else if (req.url === '/create_card_group') {
+                    Main.create_card_group(parsed, req, res, db);
+                }
             }
             catch (error) {
                 console.error('Server error:', error);
                 res.writeHead(500, {
                     [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                    [CORS.ORIGIN]: ALL
+                    [CORS.ORIGIN]: CLIENT_ORIGIN
                 });
                 res.end(JSON.stringify({ error: "Server error" }));
             }
         });
+    }
+
+    static handleGet(req, res, db) {
+        res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
+        res.setHeader('Access-Control-CLIENT_ORIGINow-Credentials', 'true');
+
+        if (req.url === '/admin/users') {
+            Main.adminPage(db, req, res);
+        } else {
+            res.writeHead(404, {
+                [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                [CORS.ORIGIN]: CLIENT_ORIGIN
+            });
+            res.end(JSON.stringify({ error: NOT_FOUND_MSG }));
+        }
     }
 
     static verifyToken(req) {
@@ -164,7 +182,7 @@ class Main {
                 console.error('Database error:', err);
                 res.writeHead(500, {
                     [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                    [CORS.ORIGIN]: ALL
+                    [CORS.ORIGIN]: CLIENT_ORIGIN
                 });
                 res.end(JSON.stringify({ error: err }));
                 return;
@@ -178,10 +196,10 @@ class Main {
 
                 if (err) {
                     console.error('Database error:', err);
-                    res.writeHead(400, { [CORS.ORIGIN]: ALL });
+                    res.writeHead(400, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                     res.end(JSON.stringify({ message: POST_FAIL_MSG }));
                 } else {
-                    res.writeHead(200, { [CORS.ORIGIN]: ALL });
+                    res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                     res.end(JSON.stringify({
                         message: POST_SUCCESS_MSG,
                         userId: result.insertId
@@ -199,13 +217,13 @@ class Main {
 
             if (err) {
                 console.error('Database error:', err);
-                res.writeHead(500, { [CORS.ORIGIN]: ALL });
+                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                 res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
                 return;
             }
 
             if (results.length === 0) {
-                res.writeHead(401, { [CORS.ORIGIN]: ALL });
+                res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                 res.end(JSON.stringify({ error: INVALID_INPUT_MSG }));
                 return;
             }
@@ -225,16 +243,97 @@ class Main {
                     { expiresIn: JWT_EXPIRES }
                 );
 
-                res.writeHead(200, { [CORS.ORIGIN]: ALL });
+                res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                 res.end(JSON.stringify({
                     message: "Sign in successful",
                     email: user.email,
                     token: token
                 }));
             } else {
-                res.writeHead(401, { [CORS.ORIGIN]: ALL });
+                res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                 res.end(JSON.stringify({ error: INVALID_INPUT_MSG }));
             }
+        });
+    }
+
+    static create_card_group(body, req, res, db) {
+        // Get user ID from session
+        const user = Main.verifyToken(req);
+
+        if (!user) {
+            res.writeHead(401, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
+            res.end(JSON.stringify({ error: "Invalid or missing token" }));
+            return;
+        }
+
+        const userId = user.userId;
+
+        const { name, description, cards } = body;
+
+        if (!name || !Array.isArray(cards) || cards.length === 0) {
+            res.writeHead(400, {
+                [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                [CORS.ORIGIN]: CLIENT_ORIGIN
+            });
+            res.end(JSON.stringify({ error: 'Invalid card group data' }));
+            return;
+        }
+
+        // Insert card group
+        const groupSql = `INSERT INTO card_groups (user_id, name, description) VALUES (?, ?, ?)`;
+
+        db.query(groupSql, [userId, name, description || ''], (err, groupResult) => {
+            if (err) {
+                console.error('Database error:', err);
+                res.writeHead(500, {
+                    [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                    [CORS.ORIGIN]: CLIENT_ORIGIN
+                });
+                res.end(JSON.stringify({ error: 'Failed to create card group' }));
+                return;
+            }
+
+            const groupId = groupResult.insertId;
+
+            // Insert all cards
+            const cardSql = `INSERT INTO cards (group_id, question, answer) VALUES ?`;
+            const cardValues = cards.map(card => [groupId, card.question, card.answer]);
+
+            db.query(cardSql, [cardValues], (err, cardResult) => {
+                res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                if (err) {
+                    console.error('Database error:', err);
+                    res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                    res.end(JSON.stringify({ error: 'Failed to create cards' }));
+                    return;
+                }
+
+                res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                res.end(JSON.stringify({
+                    message: 'Card group created successfully',
+                    groupId: groupId,
+                    cardsCreated: cardResult.affectedRows
+                }));
+            });
+        });
+    }
+
+    static adminPage(db, req, res) {
+        const sql = `SELECT id, email, password, userType FROM user`;
+
+        db.query(sql, (err, results) => {
+            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+            if (err) {
+                console.error('Database error:', err);
+                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                return;
+            }
+
+            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+            res.end(JSON.stringify({ users: results }));
         });
     }
 

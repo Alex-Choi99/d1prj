@@ -115,6 +115,98 @@ document.addEventListener('DOMContentLoaded', () => {
         successMessage.classList.remove('show');
     }
 
+    /**
+     * Parse AI response and extract flashcards
+     * @param {Object} aiResponse - The AI API response
+     * @returns {Array} Array of flashcard objects
+     */
+    function extractFlashcards(aiResponse) {
+        try {
+            if (!aiResponse || !aiResponse.choices || aiResponse.choices.length === 0) {
+                throw new Error('Invalid AI response');
+            }
+
+            const content = aiResponse.choices[0].message.content;
+            console.log('Raw AI content:', content);
+
+            // Try to find JSON array in the response
+            const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            if (!jsonMatch) {
+                throw new Error('No JSON array found in response');
+            }
+
+            const flashcards = JSON.parse(jsonMatch[0]);
+
+            // Validate flashcard structure
+            if (!Array.isArray(flashcards)) {
+                throw new Error('Flashcards is not an array');
+            }
+
+            const validCards = flashcards.filter(card => 
+                card.question && card.answer && 
+                typeof card.question === 'string' && 
+                typeof card.answer === 'string'
+            );
+
+            console.log(`Extracted ${validCards.length} valid flashcards`);
+            return validCards;
+
+        } catch (error) {
+            console.error('Error extracting flashcards:', error);
+            throw new Error('Failed to parse flashcards from AI response');
+        }
+    }
+
+    /**
+     * Save flashcards to database
+     * @param {Object} aiResponse - The AI response containing flashcards
+     * @param {string} fileName - Name of the uploaded file
+     */
+    async function parseAndSaveFlashcards(aiResponse, fileName) {
+        try {
+            // Extract flashcards from AI response
+            const flashcards = extractFlashcards(aiResponse);
+
+            if (flashcards.length === 0) {
+                throw new Error('No valid flashcards found');
+            }
+
+            // Create card group name from file name
+            const groupName = fileName.replace(/\.[^/.]+$/, '') + ' - Flashcards';
+            const timestamp = new Date().toLocaleDateString();
+
+            // Prepare data for server
+            const cardGroupData = {
+                name: groupName,
+                description: `Generated from ${fileName} on ${timestamp}`,
+                cards: flashcards
+            };
+
+            console.log('Saving card group:', cardGroupData);
+
+            // Send to server
+            const response = await fetch('http://localhost:3001/create-card-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Send cookies for authentication
+                body: JSON.stringify(cardGroupData)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to save flashcards');
+            }
+
+            showSuccess(`${result.cardsCreated} flashcards saved successfully!`);
+            console.log('Flashcards saved successfully:', result);
+
+        } catch (error) {
+            console.error('Error saving flashcards:', error);
+            showError('Flashcards generated but failed to save: ' + error.message);
+        }
+    }
+
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -131,15 +223,18 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Uploading...';
 
         try {
-            const response = await fetch("{URL_MODEL}", {
+            const response = await fetch("http://localhost:3000/", {
                 method: "POST",
                 body: formData
             });
 
             if (response.ok) {
                 const result = await response.json();
-                showSuccess('File uploaded successfully!');
-                console.log(result);
+                showSuccess('Cards generated successfully!');
+                console.log('AI Response:', result);
+
+                // Parse and save flashcards
+                await parseAndSaveFlashcards(result, file.name);
 
                 ResponseDisplay.displayResponse(result);
 

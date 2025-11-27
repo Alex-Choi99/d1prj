@@ -44,7 +44,7 @@ class Main {
 
                     req.on(END, async () => {
                         try {
-                            body += "Based on the following content, generate 5 multiple-choice with 4 options each or short written quiz questions. Format each question clearly with the question, options (A, B, C, D), and indicate the correct answer.";
+                            body += "\n\nBased on the following content, generate exactly 5 flashcards in the following JSON format. Each flashcard should have a question and a detailed answer. Return ONLY the JSON array, no additional text:\n[{\"question\": \"Your question here?\", \"answer\": \"Your detailed answer here\"}, ...]";
                             const response = await Main.query(body);
                             
                             res.writeHead(200, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
