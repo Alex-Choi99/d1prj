@@ -44,6 +44,7 @@ class AdminPanel {
             // Buttons
             deleteUsersBtn: document.getElementById('deleteUsersBtn'),
             makeAdminBtn: document.getElementById('makeAdminBtn'),
+            increaseApiCallsBtn: document.getElementById('increaseApiCallsBtn'),
             refreshBtn: document.getElementById('refreshBtn'),
             
             // Messages
@@ -136,6 +137,10 @@ class AdminPanel {
             this.initiateMakeAdmin();
         });
 
+        this.elements.increaseApiCallsBtn.addEventListener('click', () => {
+            this.initiateIncreaseApiCalls();
+        });
+
         this.elements.refreshBtn.addEventListener('click', () => {
             this.loadUsers();
         });
@@ -217,6 +222,7 @@ class AdminPanel {
 
             const userType = user.userType || 'user';
             const badgeClass = userType === 'admin' ? 'user-type-admin' : 'user-type-user';
+            const apiCalls = user.remaining_free_api_calls !== undefined ? user.remaining_free_api_calls : 'N/A';
 
             row.innerHTML = `
                 <td>
@@ -224,7 +230,7 @@ class AdminPanel {
                 </td>
                 <td>${user.id}</td>
                 <td>${user.email}</td>
-                <td title="${user.password}">${user.password}</td>
+                <td>${apiCalls}</td>
                 <td>
                     <span class="user-type-badge ${badgeClass}">${userType}</span>
                 </td>
@@ -276,6 +282,7 @@ class AdminPanel {
         const hasSelection = this.selectedUsers.size > 0;
         this.elements.deleteUsersBtn.disabled = !hasSelection;
         this.elements.makeAdminBtn.disabled = !hasSelection;
+        this.elements.increaseApiCallsBtn.disabled = !hasSelection;
     }
 
     /**
@@ -301,6 +308,24 @@ class AdminPanel {
     }
 
     /**
+     * Initiate increase API calls
+     */
+    initiateIncreaseApiCalls() {
+        if (this.selectedUsers.size === 0) return;
+
+        const amount = prompt('Enter the number of API calls to add:', '10');
+        if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
+            alert('Invalid amount');
+            return;
+        }
+
+        this.apiCallsIncrement = parseInt(amount);
+        const count = this.selectedUsers.size;
+        const message = `Add ${amount} API calls to ${count} user${count > 1 ? 's' : ''}? Enter your password to confirm.`;
+        this.showActionPasswordModal(message, 'increaseApiCalls');
+    }
+
+    /**
      * Execute the pending action
      */
     async executeAction() {
@@ -313,6 +338,8 @@ class AdminPanel {
             await this.deleteUsers(email, password);
         } else if (this.pendingAction === 'makeAdmin') {
             await this.makeUsersAdmin(email, password);
+        } else if (this.pendingAction === 'increaseApiCalls') {
+            await this.increaseUsersApiCalls(email, password, this.apiCallsIncrement);
         }
     }
 
@@ -376,6 +403,38 @@ class AdminPanel {
             }
         } catch (error) {
             console.error('Make admin error:', error);
+            this.elements.actionPasswordError.textContent = 'Network error. Please try again.';
+        }
+    }
+
+    /**
+     * Increase API calls for selected users
+     */
+    async increaseUsersApiCalls(adminEmail, adminPassword, increment) {
+        this.elements.actionPasswordError.textContent = '';
+
+        try {
+            const userIds = Array.from(this.selectedUsers);
+            const promises = userIds.map(userId => 
+                fetch(`${this.SERVER_URL}/admin/users`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, apiCallsIncrement: increment, adminEmail, adminPassword })
+                })
+            );
+
+            const results = await Promise.all(promises);
+            const allSuccessful = results.every(res => res.ok);
+
+            if (allSuccessful) {
+                this.hideActionPasswordModal();
+                await this.loadUsers();
+            } else {
+                const firstError = await results.find(res => !res.ok).json();
+                this.elements.actionPasswordError.textContent = firstError.error || 'Failed to increase API calls';
+            }
+        } catch (error) {
+            console.error('Increase API calls error:', error);
             this.elements.actionPasswordError.textContent = 'Network error. Please try again.';
         }
     }

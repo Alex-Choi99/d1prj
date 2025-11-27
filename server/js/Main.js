@@ -170,7 +170,7 @@ class Main {
                             res.end(JSON.stringify({ valid: false }));
                         }
                     } else if (req.url === '/admin/users') {
-                        const sql = `SELECT id, email, password, userType FROM user`;
+                        const sql = `SELECT id, email, userType, remaining_free_api_calls FROM user`;
 
                         db.query(sql, (err, results) => {
                             res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
@@ -182,8 +182,33 @@ class Main {
                                 return;
                             }
 
+                            console.log('Admin users query result:', JSON.stringify(results[0]));
                             res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                             res.end(JSON.stringify({ users: results }));
+                        });
+                    } else if (req.url === '/profile') {
+                        const userId = this.getUserIdFromSession(req);
+                        
+                        if (!userId) {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+                            res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ error: 'Not authenticated' }));
+                            return;
+                        }
+
+                        const sql = `SELECT email, userType, remaining_free_api_calls FROM user WHERE id = ?`;
+                        db.query(sql, [userId], (err, results) => {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                            if (err || results.length === 0) {
+                                console.error('Database error:', err);
+                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                return;
+                            }
+
+                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify(results[0]));
                         });
                     } else {
                         res.writeHead(404, { 
@@ -323,16 +348,37 @@ class Main {
                                     return;
                                 }
 
-                                const { name, description, cards } = parsed;
+                                // Check remaining API calls
+                                const checkCallsSql = `SELECT remaining_free_api_calls FROM user WHERE id = ?`;
+                                db.query(checkCallsSql, [userId], (err, userResults) => {
+                                    if (err || userResults.length === 0) {
+                                        res.writeHead(500, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
+                                        res.end(JSON.stringify({ error: 'Failed to verify user' }));
+                                        return;
+                                    }
 
-                                if (!name || !Array.isArray(cards) || cards.length === 0) {
-                                    res.writeHead(400, { 
-                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                        [CORS.ORIGIN]: CLIENT_ORIGIN
-                                    });
-                                    res.end(JSON.stringify({ error: 'Invalid card group data' }));
-                                    return;
-                                }
+                                    if (userResults[0].remaining_free_api_calls <= 0) {
+                                        res.writeHead(403, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
+                                        res.end(JSON.stringify({ error: 'No remaining free API calls' }));
+                                        return;
+                                    }
+
+                                    const { name, description, cards } = parsed;
+
+                                    if (!name || !Array.isArray(cards) || cards.length === 0) {
+                                        res.writeHead(400, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
+                                        res.end(JSON.stringify({ error: 'Invalid card group data' }));
+                                        return;
+                                    }
 
                                 // Insert card group
                                 const groupSql = `INSERT INTO card_groups (user_id, name, description) VALUES (?, ?, ?)`;
@@ -364,13 +410,23 @@ class Main {
                                             return;
                                         }
 
-                                        res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                        res.end(JSON.stringify({
-                                            message: 'Card group created successfully',
-                                            groupId: groupId,
-                                            cardsCreated: cardResult.affectedRows
-                                        }));
+                                        // Decrement remaining_free_api_calls
+                                        const decrementSql = `UPDATE user SET remaining_free_api_calls = remaining_free_api_calls - 1 WHERE id = ?`;
+                                        db.query(decrementSql, [userId], (err) => {
+                                            if (err) {
+                                                console.error('Failed to decrement API calls:', err);
+                                            }
+
+                                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                            res.end(JSON.stringify({
+                                                message: 'Card group created successfully',
+                                                groupId: groupId,
+                                                cardsCreated: cardResult.affectedRows,
+                                                remainingApiCalls: userResults[0].remaining_free_api_calls - 1
+                                            }));
+                                        });
                                     });
+                                });
                                 });
                             }
                         }
@@ -451,6 +507,7 @@ class Main {
                             const parsed = JSON.parse(putBody);
                             const userId = parsed.userId;
                             const newUserType = parsed.userType;
+                            const apiCallsIncrement = parsed.apiCallsIncrement;
                             const adminEmail = parsed.adminEmail;
                             const adminPassword = parsed.adminPassword;
 
@@ -474,9 +531,24 @@ class Main {
                                     return;
                                 }
 
-                                // Update user type
-                                const updateSql = `UPDATE user SET userType = ? WHERE id = ?`;
-                                db.query(updateSql, [newUserType, userId], (err, result) => {
+                                // Determine what to update
+                                let updateSql, updateParams;
+                                if (newUserType && apiCallsIncrement) {
+                                    updateSql = `UPDATE user SET userType = ?, remaining_free_api_calls = remaining_free_api_calls + ? WHERE id = ?`;
+                                    updateParams = [newUserType, apiCallsIncrement, userId];
+                                } else if (newUserType) {
+                                    updateSql = `UPDATE user SET userType = ? WHERE id = ?`;
+                                    updateParams = [newUserType, userId];
+                                } else if (apiCallsIncrement) {
+                                    updateSql = `UPDATE user SET remaining_free_api_calls = remaining_free_api_calls + ? WHERE id = ?`;
+                                    updateParams = [apiCallsIncrement, userId];
+                                } else {
+                                    res.writeHead(400);
+                                    res.end(JSON.stringify({ error: "No update parameters provided" }));
+                                    return;
+                                }
+
+                                db.query(updateSql, updateParams, (err, result) => {
                                     if (err) {
                                         console.error('Database error:', err);
                                         res.writeHead(500);
@@ -485,7 +557,7 @@ class Main {
                                     }
 
                                     res.writeHead(200);
-                                    res.end(JSON.stringify({ message: "User type updated successfully" }));
+                                    res.end(JSON.stringify({ message: "User updated successfully" }));
                                 });
                             });
                         } catch (error) {

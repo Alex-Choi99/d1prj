@@ -48,6 +48,7 @@ class Auth {
         const navUserInfo = document.getElementById('navUserInfo');
         const navLogout = document.getElementById('navLogout');
         const navAdmin = document.getElementById('navAdmin');
+        const navProfile = document.getElementById('navProfile');
         const userEmailSpan = document.getElementById('userEmail');
 
         if (this.isLoggedIn()) {
@@ -58,11 +59,13 @@ class Auth {
             }
             if (navLogout) navLogout.style.display = 'block';
             if (navAdmin) navAdmin.style.display = this.isAdmin() ? 'block' : 'none';
+            if (navProfile) navProfile.style.display = this.isAdmin() ? 'none' : 'block';
         } else {
             if (navSignup) navSignup.style.display = 'block';
             if (navUserInfo) navUserInfo.style.display = 'none';
             if (navLogout) navLogout.style.display = 'none';
             if (navAdmin) navAdmin.style.display = 'none';
+            if (navProfile) navProfile.style.display = 'none';
         }
     }
 

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - View Your Account</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/profile.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <nav>
+                <div class="logo">YourBrand</div>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li id="navSignup"><a href="signup.html">Sign Up</a></li>
+                    <li id="navAdmin" style="display: none;">
+                        <a href="admin.html">Admin</a>
+                    </li>
+                    <li id="navUserInfo" style="display: none;">
+                        <span id="userEmail"></span>
+                    </li>
+                    <li id="navLogout" style="display: none;">
+                        <a href="#" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <section class="profile-section">
+        <div class="container">
+            <h1>Your Profile</h1>
+            
+            <div id="loadingMessage" class="loading">Loading profile...</div>
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+            <div id="profileContent" class="profile-content" style="display: none;">
+                <div class="profile-card">
+                    <div class="profile-item">
+                        <label>Email:</label>
+                        <span id="profileEmail"></span>
+                    </div>
+                    <div class="profile-item">
+                        <label>User Type:</label>
+                        <span id="profileUserType" class="user-type-badge"></span>
+                    </div>
+                    <div class="profile-item">
+                        <label>Remaining Free API Calls:</label>
+                        <span id="profileApiCalls" class="api-calls-count"></span>
+                    </div>
+                </div>
+
+                <div class="profile-actions">
+                    <a href="cardGen.html" class="btn btn-primary">Generate Cards</a>
+                    <a href="index.html" class="btn btn-secondary">Back to Home</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Scripts -->
+    <script src="./js/Constants.js"></script>
+    <script src="./js/auth.js"></script>
+    <script src="./js/profile.js"></script>
+</body>
+
+</html>
