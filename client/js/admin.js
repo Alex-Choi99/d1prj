@@ -440,11 +440,7 @@ class AdminPanel {
     }
 }
 
-// Initialize admin panel when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOMContentLoaded event fired');
     Auth.init();
-    console.log('Auth initialized');
     new AdminPanel();
-    console.log('AdminPanel instance created');
 });

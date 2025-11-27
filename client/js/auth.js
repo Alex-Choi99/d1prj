@@ -53,6 +53,7 @@ class Auth {
         const userEmailSpan = document.getElementById('userEmail');
 
         if (this.isLoggedIn()) {
+            navProfile.style.display = 'block';
             if (navSignup) navSignup.style.display = 'none';
             if (navUserInfo) {
                 navUserInfo.style.display = 'block';
@@ -60,7 +61,6 @@ class Auth {
             }
             if (navLogout) navLogout.style.display = 'block';
             if (navAdmin) navAdmin.style.display = this.isAdmin() ? 'block' : 'none';
-            if (navProfile) navProfile.style.display = this.isAdmin() ? 'none' : 'block';
             if (navCardGen) navCardGen.style.display = 'block';
         } else {
             if (navSignup) navSignup.style.display = 'block';
