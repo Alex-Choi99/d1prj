@@ -6,6 +6,8 @@ class AdminPanel {
     constructor() {
         console.log('AdminPanel constructor called');
         this.users = [];
+        this.endpointStats = [];
+        this.userApiUsage = [];
         this.selectedUsers = new Set();
         this.pendingAction = null;
         this.adminVerified = false;
@@ -40,6 +42,16 @@ class AdminPanel {
             adminContent: document.getElementById('adminContent'),
             usersTableBody: document.getElementById('usersTableBody'),
             selectAllCheckbox: document.getElementById('selectAll'),
+            
+            // Endpoint stats elements
+            endpointStatsTableBody: document.getElementById('endpointStatsTableBody'),
+            endpointStatsLoading: document.getElementById('endpointStatsLoading'),
+            endpointStatsError: document.getElementById('endpointStatsError'),
+            
+            // User API usage elements
+            userApiUsageTableBody: document.getElementById('userApiUsageTableBody'),
+            userApiUsageLoading: document.getElementById('userApiUsageLoading'),
+            userApiUsageError: document.getElementById('userApiUsageError'),
             
             // Buttons
             deleteUsersBtn: document.getElementById('deleteUsersBtn'),
@@ -81,6 +93,8 @@ class AdminPanel {
         this.elements.adminContent.style.display = 'block';
         this.adminVerified = true;
         this.loadUsers();
+        this.loadEndpointStats();
+        this.loadUserApiUsage();
     }
 
     /**
@@ -144,6 +158,8 @@ class AdminPanel {
 
         this.elements.refreshBtn.addEventListener('click', () => {
             this.loadUsers();
+            this.loadEndpointStats();
+            this.loadUserApiUsage();
         });
     }
 
@@ -453,6 +469,150 @@ class AdminPanel {
             console.error('Increase API calls error:', error);
             this.elements.actionPasswordError.textContent = 'Network error. Please try again.';
         }
+    }
+
+    /**
+     * Load endpoint statistics
+     */
+    async loadEndpointStats() {
+        if (this.elements.endpointStatsLoading) {
+            this.elements.endpointStatsLoading.style.display = 'block';
+        }
+        if (this.elements.endpointStatsError) {
+            this.elements.endpointStatsError.style.display = 'none';
+        }
+        if (this.elements.endpointStatsTableBody) {
+            this.elements.endpointStatsTableBody.innerHTML = '';
+        }
+
+        try {
+            const response = await fetch(`${this.SERVER_URL}/admin/endpoint-stats`);
+            const result = await response.json();
+
+            if (response.ok) {
+                this.endpointStats = result.stats;
+                this.renderEndpointStats();
+                if (this.elements.endpointStatsLoading) {
+                    this.elements.endpointStatsLoading.style.display = 'none';
+                }
+            } else {
+                throw new Error(result.error || 'Failed to load endpoint stats');
+            }
+        } catch (error) {
+            console.error('Load endpoint stats error:', error);
+            if (this.elements.endpointStatsLoading) {
+                this.elements.endpointStatsLoading.style.display = 'none';
+            }
+            if (this.elements.endpointStatsError) {
+                this.elements.endpointStatsError.textContent = 'Failed to load endpoint statistics.';
+                this.elements.endpointStatsError.style.display = 'block';
+            }
+        }
+    }
+
+    /**
+     * Render endpoint statistics table
+     */
+    renderEndpointStats() {
+        if (!this.elements.endpointStatsTableBody) return;
+        
+        this.elements.endpointStatsTableBody.innerHTML = '';
+
+        if (this.endpointStats.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="5" style="text-align: center;">No endpoint data available yet</td>';
+            this.elements.endpointStatsTableBody.appendChild(row);
+            return;
+        }
+
+        this.endpointStats.forEach(stat => {
+            const row = document.createElement('tr');
+            const avgResponseTime = stat.avg_response_time ? Math.round(stat.avg_response_time) : 'N/A';
+            const lastRequest = stat.last_request ? new Date(stat.last_request).toLocaleString() : 'N/A';
+            
+            row.innerHTML = `
+                <td><span class="method-badge method-${stat.method.toLowerCase()}">${stat.method}</span></td>
+                <td><code>${stat.endpoint}</code></td>
+                <td>${stat.request_count}</td>
+                <td>${avgResponseTime} ms</td>
+                <td>${lastRequest}</td>
+            `;
+            this.elements.endpointStatsTableBody.appendChild(row);
+        });
+    }
+
+    /**
+     * Load user API usage
+     */
+    async loadUserApiUsage() {
+        if (this.elements.userApiUsageLoading) {
+            this.elements.userApiUsageLoading.style.display = 'block';
+        }
+        if (this.elements.userApiUsageError) {
+            this.elements.userApiUsageError.style.display = 'none';
+        }
+        if (this.elements.userApiUsageTableBody) {
+            this.elements.userApiUsageTableBody.innerHTML = '';
+        }
+
+        try {
+            const response = await fetch(`${this.SERVER_URL}/admin/user-api-usage`);
+            const result = await response.json();
+
+            if (response.ok) {
+                this.userApiUsage = result.users;
+                this.renderUserApiUsage();
+                if (this.elements.userApiUsageLoading) {
+                    this.elements.userApiUsageLoading.style.display = 'none';
+                }
+            } else {
+                throw new Error(result.error || 'Failed to load user API usage');
+            }
+        } catch (error) {
+            console.error('Load user API usage error:', error);
+            if (this.elements.userApiUsageLoading) {
+                this.elements.userApiUsageLoading.style.display = 'none';
+            }
+            if (this.elements.userApiUsageError) {
+                this.elements.userApiUsageError.textContent = 'Failed to load user API usage.';
+                this.elements.userApiUsageError.style.display = 'block';
+            }
+        }
+    }
+
+    /**
+     * Render user API usage table
+     */
+    renderUserApiUsage() {
+        if (!this.elements.userApiUsageTableBody) return;
+        
+        this.elements.userApiUsageTableBody.innerHTML = '';
+
+        if (this.userApiUsage.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="6" style="text-align: center;">No user API usage data available</td>';
+            this.elements.userApiUsageTableBody.appendChild(row);
+            return;
+        }
+
+        this.userApiUsage.forEach(user => {
+            const row = document.createElement('tr');
+            const userType = user.userType || 'user';
+            const badgeClass = userType === 'admin' ? 'user-type-admin' : 'user-type-user';
+            const apiKey = user.api_key && user.api_key !== 'N/A' 
+                ? `<code class="api-key">${user.api_key.substring(0, 16)}...${user.api_key.substring(user.api_key.length - 8)}</code>` 
+                : '<span class="no-key">No Key</span>';
+            
+            row.innerHTML = `
+                <td>${user.user_id}</td>
+                <td>${user.email}</td>
+                <td><span class="user-type-badge ${badgeClass}">${userType}</span></td>
+                <td>${apiKey}</td>
+                <td>${user.total_requests}</td>
+                <td>${user.remaining_free_api_calls}</td>
+            `;
+            this.elements.userApiUsageTableBody.appendChild(row);
+        });
     }
 }
 

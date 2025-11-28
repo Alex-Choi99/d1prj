@@ -123,37 +123,81 @@ document.addEventListener('DOMContentLoaded', () => {
     function extractFlashcards(aiResponse) {
         try {
             if (!aiResponse || !aiResponse.choices || aiResponse.choices.length === 0) {
-                throw new Error('Invalid AI response');
+                throw new Error('Invalid AI response structure');
             }
 
-            const content = aiResponse.choices[0].message.content;
+            let content = aiResponse.choices[0].message.content;
             console.log('Raw AI content:', content);
 
-            // Try to find JSON array in the response
-            const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
-            if (!jsonMatch) {
-                throw new Error('No JSON array found in response');
+            // Clean up the content - remove markdown code blocks if present
+            content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+            content = content.trim();
+
+            // Try multiple strategies to extract JSON
+            let flashcards = null;
+
+            // Strategy 1: Try direct JSON parse
+            try {
+                flashcards = JSON.parse(content);
+            } catch (e) {
+                console.log('Direct parse failed, trying regex extraction...');
             }
 
-            const flashcards = JSON.parse(jsonMatch[0]);
+            // Strategy 2: Extract JSON array using regex
+            if (!flashcards) {
+                const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+                if (jsonMatch) {
+                    try {
+                        flashcards = JSON.parse(jsonMatch[0]);
+                    } catch (e) {
+                        console.log('Regex extracted JSON parse failed:', e);
+                    }
+                }
+            }
+
+            // Strategy 3: Try to find array brackets and extract content between them
+            if (!flashcards) {
+                const firstBracket = content.indexOf('[');
+                const lastBracket = content.lastIndexOf(']');
+                if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+                    try {
+                        const jsonStr = content.substring(firstBracket, lastBracket + 1);
+                        flashcards = JSON.parse(jsonStr);
+                    } catch (e) {
+                        console.log('Bracket extraction parse failed:', e);
+                    }
+                }
+            }
+
+            if (!flashcards) {
+                console.error('All parsing strategies failed. Content:', content);
+                throw new Error('Could not extract JSON from AI response');
+            }
 
             // Validate flashcard structure
             if (!Array.isArray(flashcards)) {
-                throw new Error('Flashcards is not an array');
+                throw new Error('Parsed data is not an array');
             }
 
-            const validCards = flashcards.filter(card => 
-                card.question && card.answer && 
-                typeof card.question === 'string' && 
-                typeof card.answer === 'string'
-            );
+            // Filter and validate cards
+            const validCards = flashcards.filter(card => {
+                if (!card || typeof card !== 'object') return false;
+                if (!card.question || !card.answer) return false;
+                if (typeof card.question !== 'string' || typeof card.answer !== 'string') return false;
+                return card.question.trim() !== '' && card.answer.trim() !== '';
+            });
 
-            console.log(`Extracted ${validCards.length} valid flashcards`);
+            if (validCards.length === 0) {
+                throw new Error('No valid flashcards found in the response');
+            }
+
+            console.log(`Successfully extracted ${validCards.length} valid flashcards`);
             return validCards;
 
         } catch (error) {
             console.error('Error extracting flashcards:', error);
-            throw new Error('Failed to parse flashcards from AI response');
+            console.error('Full error details:', error.stack);
+            throw new Error('Failed to parse flashcards from AI response: ' + error.message);
         }
     }
 
@@ -171,6 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('No valid flashcards found');
             }
 
+            // Show preview of generated cards
+            console.log('Generated flashcards:', flashcards);
+
             // Create card group name from file name
             const groupName = fileName.replace(/\.[^/.]+$/, '') + ' - Flashcards';
             const timestamp = new Date().toLocaleDateString();
@@ -184,8 +231,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log('Saving card group:', cardGroupData);
 
-            // Send to server
-            const response = await fetch('http://localhost:3001/create-card-group', {
+            // Check if user is logged in
+            const isLoggedIn = sessionStorage.getItem('isLoggedIn');
+            console.log('Is logged in:', isLoggedIn);
+            
+            if (!isLoggedIn || isLoggedIn !== 'true') {
+                throw new Error('You must be logged in to save flashcards. Please sign in and try again.');
+            }
+
+            // Send to server using Constants URL
+            const serverUrl = Constants.URL_SERVER.replace(/\/+$/, '');
+            console.log('Sending to:', `${serverUrl}/create-card-group`);
+            
+            const response = await fetch(`${serverUrl}/create-card-group`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include', // Send cookies for authentication
@@ -193,17 +251,30 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const result = await response.json();
+            console.log('Server response:', response.status, result);
 
             if (!response.ok) {
                 throw new Error(result.error || 'Failed to save flashcards');
             }
 
             console.log('Flashcards saved successfully:', result);
-            showSuccess(`${result.cardsCreated} flashcards saved successfully!`);
+            showSuccess(`Success! ${result.cardsCreated} flashcards saved. Go to Study page to review them!`);
 
         } catch (error) {
             console.error('Error saving flashcards:', error);
-            showError('Flashcards generated but failed to save: ' + error.message);
+            
+            // More detailed error message
+            let errorMsg = 'Failed to save: ' + error.message;
+            if (error.message.includes('parse')) {
+                errorMsg = 'The AI response format was unexpected. Please try again.';
+            } else if (error.message.includes('authenticated') || error.message.includes('logged in')) {
+                errorMsg = error.message;
+            }
+            
+            showError(errorMsg);
+            
+            // Still show the flashcards in ResponseDisplay even if save failed
+            // so user can see what was generated
         }
     }
 
@@ -220,34 +291,36 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', file);
 
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Uploading...';
+        submitBtn.textContent = 'Uploading & Generating...';
+        hideMessages();
 
         try {
+            // Step 1: Upload and generate cards
             const response = await fetch("http://localhost:3000/", {
                 method: "POST",
                 body: formData
             });
 
-            if (response.ok) {
-                const result = await response.json();
-                showSuccess('Cards generated successfully!');
-                console.log('AI Response:', result);
-
-                // Parse and save flashcards
-                await parseAndSaveFlashcards(result, file.name);
-
-                ResponseDisplay.displayResponse(result);
-
-            } else {
-                throw new Error('Upload failed');
+            if (!response.ok) {
+                throw new Error('Failed to generate flashcards from AI');
             }
+
+            const result = await response.json();
+            console.log('AI Response received:', result);
+
+            // Step 2: Parse and save flashcards
+            submitBtn.textContent = 'Saving cards...';
+            await parseAndSaveFlashcards(result, file.name);
+
+            // Step 3: Display the cards
+            ResponseDisplay.displayResponse(result);
+
         } catch (error) {
-            showError('Upload failed. Please try again.');
             console.error('Upload error:', error);
+            showError(`Error: ${error.message}. Please try again.`);
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Generate Cards';
-
         }
     });
 });

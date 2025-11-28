@@ -17,9 +17,45 @@ const router = express.Router();
  *       201:
  *         description: Explanation created successfully
  */
-router.post("/explanations", (req, res) => {
-    res.status(201).send("Explanation created");
+router.post("/", async (req, res) => {
+    try {
+        const { question, answer, sourceText, difficulty } = req.body;
+
+        if (!question || !answer) {
+            return res.status(400).json({ error: 'Question and answer are required' });
+        }
+
+        // Generate AI explanation based on difficulty
+        const explanation = generateExplanation(question, answer, sourceText, difficulty || 'medium');
+
+        res.status(201).json({
+            id: Date.now().toString(),
+            question,
+            answer,
+            sourceText,
+            explanation,
+            difficulty: difficulty || 'medium',
+            createdAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error creating explanation:', error);
+        res.status(500).json({ error: 'Failed to create explanation' });
+    }
 });
+
+/**
+ * Generate AI explanation based on difficulty level
+ */
+function generateExplanation(question, answer, sourceText, difficulty) {
+    // This is a simplified version - you would integrate with HuggingFace or another AI service
+    const templates = {
+        easy: `Let me explain this in simple terms:\n\nQuestion: ${question}\n\nAnswer: ${answer}\n\nIn other words: This means ${answer.toLowerCase()}. Think of it as a straightforward concept that you can apply directly.`,
+        medium: `Here's a detailed explanation:\n\nQuestion: ${question}\n\nAnswer: ${answer}\n\nExplanation: The answer addresses the question by providing ${answer}. This involves understanding the relationship between the question's key concepts and how they connect to form the solution. Consider the context and how this applies to similar scenarios.`,
+        hard: `Advanced Analysis:\n\nQuestion: ${question}\n\nAnswer: ${answer}\n\nDeep Dive: This answer represents a complex concept that requires understanding multiple layers. First, consider the theoretical foundation behind why ${answer} is the correct response. Then, analyze the implications of this answer in broader contexts. Think critically about edge cases, alternative interpretations, and how this knowledge connects to advanced topics in the field.`
+    };
+
+    return templates[difficulty] || templates.medium;
+}
 
 /**
  * @swagger

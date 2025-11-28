@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study - Flashcard Review</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/study.css">
+    <script src="./js/checkAdmin.js"></script>
+    <script src="./js/navbar.js"></script>
+</head>
+
+<body class="study-page">
+    <header>
+        <div class="container">
+        </div>
+    </header>
+
+    <section class="study-section">
+        <div class="container">
+            <h1>Study Your Flashcards</h1>
+            
+            <div id="loadingMessage" class="loading">Loading your card groups...</div>
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            
+            <!-- Card Groups List -->
+            <div id="cardGroupsList" class="card-groups-container" style="display: none;">
+                <!-- Groups will be dynamically loaded here -->
+            </div>
+            
+            <!-- No Groups Message -->
+            <div id="noGroupsMessage" class="no-groups-message" style="display: none;">
+                <h2>No Flashcard Groups Yet</h2>
+                <p>You haven't created any flashcard groups. Get started by generating some cards!</p>
+                <a href="cardGen.html" class="btn btn-primary">Create Flashcards</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Explanation Modal -->
+    <div id="explanationModal" class="modal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeExplanationModal()">&times;</button>
+            <h2>AI Explanation</h2>
+            <div class="explanation-controls">
+                <label for="difficultySelect">Difficulty:</label>
+                <select id="difficultySelect">
+                    <option value="easy">Easy</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+                <button id="regenerateExplanationBtn" class="btn btn-secondary">Regenerate</button>
+            </div>
+            <div id="explanationContent" class="explanation-content">
+                <p class="loading">Generating explanation...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="./js/Constants.js"></script>
+    <script src="./js/auth.js"></script>
+    <script src="./js/study.js"></script>
+</body>
+
+</html>

@@ -8,6 +8,7 @@ const DB_USER               = process.env.DB_USER;
 const DB_PASSWORD           = process.env.DB_PASSWORD;
 const DB_NAME               = process.env.DB_NAME;
 const PORT                  = 3001;
+const API_SERVICE_URL       = process.env.API_SERVICE_URL || 'http://localhost:5000';
 const HEADER_CONTENT_TYPE   = "Content-Type";
 const HEADER_JSON_CONTENT   = "application/json";
 const GET                   = "GET";
@@ -102,9 +103,26 @@ class Main {
      */
     static getUserIdFromSession(req) {
         const cookies = this.parseCookies(req);
+        console.log('Cookies:', cookies);
         const token = cookies[SESSION_COOKIE_NAME];
+        console.log('Session token:', token);
         const session = this.validateSession(token);
+        console.log('Session:', session);
         return session ? session.userId : null;
+    }
+
+    /**
+     * Log API usage to database
+     */
+    static logApiUsage(db, userId, method, endpoint, statusCode, responseTime, ipAddress) {
+        const sql = `INSERT INTO api_usage_log (user_id, method, endpoint, status_code, response_time_ms, ip_address) 
+                     VALUES (?, ?, ?, ?, ?, ?)`;
+        
+        db.query(sql, [userId, method, endpoint, statusCode, responseTime, ipAddress], (err) => {
+            if (err) {
+                console.error('Failed to log API usage:', err);
+            }
+        });
     }
 
     /**
@@ -186,6 +204,102 @@ class Main {
                             res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                             res.end(JSON.stringify({ users: results }));
                         });
+                    } else if (req.url === '/card-groups') {
+                        // Get all card groups with their cards for the logged-in user
+                        console.log('[/card-groups] Request received');
+                        
+                        let userId;
+                        try {
+                            userId = this.getUserIdFromSession(req);
+                            console.log('[/card-groups] userId from session:', userId);
+                        } catch (error) {
+                            console.error('[/card-groups] Error getting userId:', error);
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+                            res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ error: 'Session error' }));
+                            return;
+                        }
+                        
+                        if (!userId) {
+                            console.log('[/card-groups] No userId - not authenticated');
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+                            res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ error: 'Not authenticated' }));
+                            return;
+                        }
+
+                        const sql = `
+                            SELECT 
+                                cg.id as group_id,
+                                cg.name as group_name,
+                                cg.description as group_description,
+                                cg.created_at as group_created_at,
+                                c.id as card_id,
+                                c.question,
+                                c.answer,
+                                c.explanation_text,
+                                c.explanation_difficulty,
+                                c.explanation_generated_at,
+                                c.created_at as card_created_at
+                            FROM card_groups cg
+                            LEFT JOIN cards c ON cg.id = c.group_id
+                            WHERE cg.user_id = ?
+                            ORDER BY cg.created_at DESC, c.created_at ASC
+                        `;
+
+                        console.log('[/card-groups] Executing query for userId:', userId);
+
+                        db.query(sql, [userId], (err, results) => {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                            if (err) {
+                                console.error('[/card-groups] Database error:', err);
+                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                return;
+                            }
+
+                            console.log('[/card-groups] Query returned', results.length, 'rows');
+
+                            // Transform flat results into nested structure
+                            const groupsMap = new Map();
+                            
+                            try {
+                                results.forEach(row => {
+                                    if (!groupsMap.has(row.group_id)) {
+                                        groupsMap.set(row.group_id, {
+                                            id: row.group_id,
+                                            name: row.group_name,
+                                            description: row.group_description,
+                                            created_at: row.group_created_at,
+                                            cards: []
+                                        });
+                                    }
+                                    
+                                    if (row.card_id) {
+                                        groupsMap.get(row.group_id).cards.push({
+                                            id: row.card_id,
+                                            question: row.question,
+                                            answer: row.answer,
+                                            explanation_text: row.explanation_text,
+                                            explanation_difficulty: row.explanation_difficulty,
+                                            explanation_generated_at: row.explanation_generated_at,
+                                            created_at: row.card_created_at
+                                        });
+                                    }
+                                });
+
+                                const groups = Array.from(groupsMap.values());
+                                console.log('[/card-groups] Returning', groups.length, 'groups');
+
+                                res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ groups }));
+                            } catch (transformError) {
+                                console.error('[/card-groups] Error transforming results:', transformError);
+                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ error: 'Data transformation error' }));
+                            }
+                        });
                     } else if (req.url === '/profile') {
                         const userId = this.getUserIdFromSession(req);
                         
@@ -209,6 +323,64 @@ class Main {
 
                             res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
                             res.end(JSON.stringify(results[0]));
+                        });
+                    } else if (req.url === '/admin/endpoint-stats') {
+                        // Get endpoint statistics
+                        const sql = `
+                            SELECT 
+                                method,
+                                endpoint,
+                                COUNT(*) as request_count,
+                                AVG(response_time_ms) as avg_response_time,
+                                MAX(request_timestamp) as last_request
+                            FROM api_usage_log
+                            GROUP BY method, endpoint
+                            ORDER BY request_count DESC
+                        `;
+
+                        db.query(sql, (err, results) => {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                            if (err) {
+                                console.error('Database error:', err);
+                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                return;
+                            }
+
+                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ stats: results }));
+                        });
+                    } else if (req.url === '/admin/user-api-usage') {
+                        // Get per-user API consumption with tokens
+                        const sql = `
+                            SELECT 
+                                u.id as user_id,
+                                u.email,
+                                u.userType,
+                                COALESCE(ak.api_key, 'N/A') as api_key,
+                                COALESCE(ak.key_name, 'No Key') as key_name,
+                                COUNT(aul.id) as total_requests,
+                                u.remaining_free_api_calls
+                            FROM user u
+                            LEFT JOIN api_keys ak ON u.id = ak.user_id AND ak.is_active = TRUE
+                            LEFT JOIN api_usage_log aul ON u.id = aul.user_id
+                            GROUP BY u.id, u.email, u.userType, ak.api_key, ak.key_name, u.remaining_free_api_calls
+                            ORDER BY total_requests DESC
+                        `;
+
+                        db.query(sql, (err, results) => {
+                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+
+                            if (err) {
+                                console.error('Database error:', err);
+                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
+                                return;
+                            }
+
+                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                            res.end(JSON.stringify({ users: results }));
                         });
                     } else {
                         res.writeHead(404, { 
@@ -337,9 +509,14 @@ class Main {
                                 });
                             } else if (req.url === '/create-card-group') {
                                 // Get user ID from session
+                                console.log('Create card group request received');
+                                console.log('Request headers:', req.headers);
+                                
                                 const userId = this.getUserIdFromSession(req);
+                                console.log('User ID from session:', userId);
                                 
                                 if (!userId) {
+                                    console.log('Authentication failed - no userId');
                                     res.writeHead(401, { 
                                         [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
                                         [CORS.ORIGIN]: CLIENT_ORIGIN
@@ -427,6 +604,99 @@ class Main {
                                         });
                                     });
                                 });
+                                });
+                            } else if (req.url === '/generate-explanation') {
+                                // Proxy explanation generation to API microservice
+                                const userId = this.getUserIdFromSession(req);
+                                
+                                if (!userId) {
+                                    res.writeHead(401, { 
+                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                        [CORS.ORIGIN]: CLIENT_ORIGIN
+                                    });
+                                    res.end(JSON.stringify({ error: 'Not authenticated' }));
+                                    return;
+                                }
+
+                                const { cardId, difficulty } = parsed;
+
+                                if (!cardId) {
+                                    res.writeHead(400, { 
+                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                        [CORS.ORIGIN]: CLIENT_ORIGIN
+                                    });
+                                    res.end(JSON.stringify({ error: 'Card ID required' }));
+                                    return;
+                                }
+
+                                // Fetch card data
+                                const cardSql = `SELECT c.*, cg.user_id FROM cards c 
+                                               JOIN card_groups cg ON c.group_id = cg.id 
+                                               WHERE c.id = ? AND cg.user_id = ?`;
+                                
+                                db.query(cardSql, [cardId, userId], async (err, cardResults) => {
+                                    if (err || cardResults.length === 0) {
+                                        res.writeHead(404, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
+                                        res.end(JSON.stringify({ error: 'Card not found' }));
+                                        return;
+                                    }
+
+                                    const card = cardResults[0];
+
+                                    // Call API microservice to generate explanation
+                                    try {
+                                        const apiResponse = await fetch(`${API_SERVICE_URL}/api/explanations`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                question: card.question,
+                                                answer: card.answer,
+                                                sourceText: `${card.question}\n${card.answer}`,
+                                                difficulty: difficulty || 'medium'
+                                            })
+                                        });
+
+                                        const explanation = await apiResponse.json();
+
+                                        if (!apiResponse.ok) {
+                                            throw new Error('API service error');
+                                        }
+
+                                        // Store explanation in database
+                                        const updateSql = `UPDATE cards 
+                                                         SET explanation_text = ?, 
+                                                             explanation_difficulty = ?,
+                                                             explanation_generated_at = CURRENT_TIMESTAMP
+                                                         WHERE id = ?`;
+                                        
+                                        db.query(updateSql, [explanation.explanation, difficulty || 'medium', cardId], (err) => {
+                                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
+                                            
+                                            if (err) {
+                                                console.error('Failed to store explanation:', err);
+                                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                                res.end(JSON.stringify({ error: 'Failed to store explanation' }));
+                                                return;
+                                            }
+
+                                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
+                                            res.end(JSON.stringify({
+                                                message: 'Explanation generated successfully',
+                                                explanation: explanation.explanation,
+                                                difficulty: difficulty || 'medium'
+                                            }));
+                                        });
+                                    } catch (apiError) {
+                                        console.error('API service error:', apiError);
+                                        res.writeHead(500, { 
+                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
+                                            [CORS.ORIGIN]: CLIENT_ORIGIN
+                                        });
+                                        res.end(JSON.stringify({ error: 'Failed to generate explanation' }));
+                                    }
                                 });
                             }
                         }

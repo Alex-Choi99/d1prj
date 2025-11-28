@@ -44,8 +44,21 @@ class Main {
 
                     req.on(END, async () => {
                         try {
-                            body += "\n\nBased on the following content, generate exactly 5 flashcards in the following JSON format. Each flashcard should have a question and a detailed answer. Return ONLY the JSON array, no additional text:\n[{\"question\": \"Your question here?\", \"answer\": \"Your detailed answer here\"}, ...]";
-                            const response = await Main.query(body);
+                            // Enhanced prompt for better JSON formatting
+                            const enhancedPrompt = body + "\n\n" +
+                                "IMPORTANT: Based on the content above, generate exactly 5 flashcards.\n" +
+                                "You MUST respond with ONLY a valid JSON array, nothing else.\n" +
+                                "Format:\n" +
+                                "[{\"question\": \"Question 1?\", \"answer\": \"Detailed answer 1\"}, " +
+                                "{\"question\": \"Question 2?\", \"answer\": \"Detailed answer 2\"}, ...]\n\n" +
+                                "Rules:\n" +
+                                "- Return ONLY the JSON array\n" +
+                                "- No explanations, no markdown, no code blocks\n" +
+                                "- Each question should end with a question mark\n" +
+                                "- Each answer should be detailed and educational\n" +
+                                "- Ensure proper JSON formatting with double quotes\n";
+                            
+                            const response = await Main.query(enhancedPrompt);
                             
                             res.writeHead(200, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
                             res.end(JSON.stringify(response));

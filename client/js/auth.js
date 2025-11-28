@@ -50,6 +50,7 @@ class Auth {
         const navAdmin = document.getElementById('navAdmin');
         const navProfile = document.getElementById('navProfile');
         const navCardGen = document.getElementById('navCardGen');
+        const navStudy = document.getElementById('navStudy');
         const userEmailSpan = document.getElementById('userEmail');
 
         if (this.isLoggedIn()) {
@@ -62,12 +63,14 @@ class Auth {
             if (navLogout) navLogout.style.display = 'block';
             if (navAdmin) navAdmin.style.display = this.isAdmin() ? 'block' : 'none';
             if (navCardGen) navCardGen.style.display = 'block';
+            if (navStudy) navStudy.style.display = 'block';
         } else {
             if (navSignup) navSignup.style.display = 'block';
             if (navUserInfo) navUserInfo.style.display = 'none';
             if (navLogout) navLogout.style.display = 'none';
             if (navAdmin) navAdmin.style.display = 'none';
             if (navProfile) navProfile.style.display = 'none';
+            if (navStudy) navStudy.style.display = 'none';
         }
     }
 

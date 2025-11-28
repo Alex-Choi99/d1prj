@@ -61,6 +61,16 @@
 }
 
 /* Table Styles */
+.table-section {
+    margin-bottom: 40px;
+}
+
+.table-section h2 {
+    margin-bottom: 20px;
+    color: #333;
+    font-size: 20px;
+}
+
 .table-container {
     overflow-x: auto;
     background: white;
@@ -68,29 +78,41 @@
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-#usersTable {
+#usersTable,
+#endpointStatsTable,
+#userApiUsageTable {
     width: 100%;
     border-collapse: collapse;
 }
 
-#usersTable thead {
+#usersTable thead,
+#endpointStatsTable thead,
+#userApiUsageTable thead {
     background-color: #f8f9fa;
 }
 
 #usersTable th,
-#usersTable td {
+#usersTable td,
+#endpointStatsTable th,
+#endpointStatsTable td,
+#userApiUsageTable th,
+#userApiUsageTable td {
     padding: 12px 15px;
     text-align: left;
     border-bottom: 1px solid #dee2e6;
 }
 
-#usersTable th {
+#usersTable th,
+#endpointStatsTable th,
+#userApiUsageTable th {
     font-weight: 600;
     color: #495057;
     white-space: nowrap;
 }
 
-#usersTable tbody tr:hover {
+#usersTable tbody tr:hover,
+#endpointStatsTable tbody tr:hover,
+#userApiUsageTable tbody tr:hover {
     background-color: #f8f9fa;
 }
 
@@ -98,8 +120,66 @@
     background-color: #e7f3ff;
 }
 
-#usersTable td {
+#usersTable td,
+#endpointStatsTable td,
+#userApiUsageTable td {
     color: #212529;
+}
+
+/* Method badges for endpoint stats */
+.method-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.method-get {
+    background-color: #28a745;
+    color: white;
+}
+
+.method-post {
+    background-color: #007bff;
+    color: white;
+}
+
+.method-put {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.method-delete {
+    background-color: #dc3545;
+    color: white;
+}
+
+.method-options {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* API Key styling */
+code {
+    background-color: #f4f4f4;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #333;
+}
+
+.api-key {
+    color: #0066cc;
+    font-weight: 500;
+}
+
+.no-key {
+    color: #999;
+    font-style: italic;
 }
 
 #usersTable td:nth-child(4) {
