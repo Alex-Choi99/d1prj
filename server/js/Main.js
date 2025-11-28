@@ -111,9 +111,8 @@ class Main {
      * Get user ID from session
      */
     static getUserIdFromSession(req) {
-        const cookies = this.parseCookies(req);
-        console.log('Cookies:', cookies);
-        const token = cookies[SESSION_COOKIE_NAME];
+        // Express cookie-parser middleware makes cookies available in req.cookies
+        const token = req.cookies[SESSION_COOKIE_NAME];
         console.log('Session token:', token);
         const session = this.validateSession(token);
         console.log('Session:', session);
