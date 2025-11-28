@@ -217,15 +217,22 @@ class Main {
          *         description: Server error
          */
         app.get('/admin/users', (req, res) => {
+            const startTime = Date.now();
+            const userId = this.getUserIdFromSession(req);
             const sql = `SELECT id, email, userType, remaining_free_api_calls FROM user`;
 
             db.query(sql, (err, results) => {
                 if (err) {
                     console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'GET', '/admin/users', 500, responseTime, req.ip);
                     return res.status(500).json({ error: "Server error.\n" });
                 }
 
                 console.log('Admin users query result:', JSON.stringify(results[0]));
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, userId, 'GET', '/admin/users', 200, responseTime, req.ip);
+                
                 res.json({ users: results });
             });
         });
@@ -245,9 +252,12 @@ class Main {
          *         description: Not authenticated
          */
         app.get('/profile', (req, res) => {
+            const startTime = Date.now();
             const userId = this.getUserIdFromSession(req);
             
             if (!userId) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'GET', '/profile', 401, responseTime, req.ip);
                 return res.status(401).json({ error: 'Not authenticated' });
             }
 
@@ -255,8 +265,13 @@ class Main {
             db.query(sql, [userId], (err, results) => {
                 if (err || results.length === 0) {
                     console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'GET', '/profile', 500, responseTime, req.ip);
                     return res.status(500).json({ error: "Server error.\n" });
                 }
+
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, userId, 'GET', '/profile', 200, responseTime, req.ip);
 
                 res.json(results[0]);
             });
@@ -293,9 +308,12 @@ class Main {
          *         description: Email already in use
          */
         app.post('/signup', async (req, res) => {
+            const startTime = Date.now();
             const { email, password } = req.body;
 
             if (!this.validateEmail(email)) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'POST', '/signup', 400, responseTime, req.ip);
                 return res.status(400).json({ message: "Invalid email format.\n" });
             }
 
@@ -303,11 +321,15 @@ class Main {
 
             db.query(checkEmailSql, [email], async (err, results) => {
                 if (results.length > 0) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, null, 'POST', '/signup', 409, responseTime, req.ip);
                     return res.status(409).json({ message: "Email already in use.\n" });
                 }
                 
                 if (err) {
                     console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, null, 'POST', '/signup', 500, responseTime, req.ip);
                     return res.status(500).json({ error: err });
                 }
 
@@ -317,8 +339,13 @@ class Main {
                 db.query(insertSql, [email, hashedPassword], (err, result) => {
                     if (err) {
                         console.error('Database error:', err);
+                        const responseTime = Date.now() - startTime;
+                        this.logApiUsage(db, null, 'POST', '/signup', 400, responseTime, req.ip);
                         return res.status(400).json({ message: "Data insertion failed.\n" });
                     }
+
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, result.insertId, 'POST', '/signup', 200, responseTime, req.ip);
 
                     res.json({
                         message: "Data inserted successfully.\n",
@@ -355,16 +382,21 @@ class Main {
          *         description: Invalid credentials
          */
         app.post('/signin', async (req, res) => {
+            const startTime = Date.now();
             const { email, password } = req.body;
             const sql = `SELECT * FROM user WHERE email = ?`;
 
             db.query(sql, [email], async (err, results) => {
                 if (err) {
                     console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, null, 'POST', '/signin', 500, responseTime, req.ip);
                     return res.status(500).json({ error: "Server error.\n" });
                 }
 
                 if (results.length === 0) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, null, 'POST', '/signin', 401, responseTime, req.ip);
                     return res.status(401).json({ error: "Invalid email or password.\n" });
                 }
 
@@ -388,6 +420,9 @@ class Main {
                         maxAge: maxAge
                     });
 
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, user.id, 'POST', '/signin', 200, responseTime, req.ip);
+
                     res.json({
                         message: "Sign in successful",
                         email: user.email,
@@ -395,6 +430,8 @@ class Main {
                         userId: user.id
                     });
                 } else {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, user.id, 'POST', '/signin', 401, responseTime, req.ip);
                     res.status(401).json({ error: "Invalid email or password.\n" });
                 }
             });
@@ -625,6 +662,186 @@ class Main {
                     }
 
                     res.json({ message: "User updated successfully" });
+                });
+            });
+        });
+
+        /**
+         * @swagger
+         * /admin/endpoint-stats:
+         *   get:
+         *     summary: Get API endpoint statistics (Admin only)
+         *     tags: [Admin]
+         *     security:
+         *       - cookieAuth: []
+         *     responses:
+         *       200:
+         *         description: Endpoint statistics retrieved successfully
+         *       500:
+         *         description: Server error
+         */
+        app.get('/admin/endpoint-stats', (req, res) => {
+            const sql = `
+                SELECT 
+                    method,
+                    endpoint,
+                    COUNT(*) as request_count,
+                    AVG(response_time_ms) as avg_response_time,
+                    MAX(created_at) as last_request
+                FROM api_usage_log 
+                GROUP BY method, endpoint 
+                ORDER BY request_count DESC
+            `;
+
+            db.query(sql, (err, results) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ error: "Server error.\n" });
+                }
+
+                res.json({ stats: results });
+            });
+        });
+
+        /**
+         * @swagger
+         * /admin/user-api-usage:
+         *   get:
+         *     summary: Get user API usage statistics (Admin only)
+         *     tags: [Admin]
+         *     security:
+         *       - cookieAuth: []
+         *     responses:
+         *       200:
+         *         description: User API usage retrieved successfully
+         *       500:
+         *         description: Server error
+         */
+        app.get('/admin/user-api-usage', (req, res) => {
+            const startTime = Date.now();
+            const userId = this.getUserIdFromSession(req);
+            const sql = `
+                SELECT 
+                    u.id as user_id,
+                    u.email,
+                    u.userType,
+                    u.remaining_free_api_calls,
+                    COALESCE(api_stats.total_requests, 0) as total_requests,
+                    COALESCE(
+                        CASE 
+                            WHEN u.api_key IS NOT NULL AND u.api_key != '' THEN u.api_key
+                            WHEN ak.api_key IS NOT NULL THEN ak.api_key
+                            ELSE 'N/A'
+                        END, 
+                        'N/A'
+                    ) as api_key
+                FROM user u
+                LEFT JOIN (
+                    SELECT 
+                        user_id, 
+                        COUNT(*) as total_requests 
+                    FROM api_usage_log 
+                    GROUP BY user_id
+                ) api_stats ON u.id = api_stats.user_id
+                LEFT JOIN (
+                    SELECT 
+                        user_id, 
+                        api_key 
+                    FROM api_keys 
+                    WHERE is_active = TRUE 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                ) ak ON u.id = ak.user_id
+                ORDER BY total_requests DESC, u.id ASC
+            `;
+
+            db.query(sql, (err, results) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'GET', '/admin/user-api-usage', 500, responseTime, req.ip);
+                    return res.status(500).json({ error: "Server error.\n" });
+                }
+
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, userId, 'GET', '/admin/user-api-usage', 200, responseTime, req.ip);
+
+                res.json({ users: results });
+            });
+        });
+
+        /**
+         * @swagger
+         * /admin/generate-api-key:
+         *   post:
+         *     summary: Generate API key for a user (Admin only)
+         *     tags: [Admin]
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - userId
+         *               - adminEmail
+         *               - adminPassword
+         *             properties:
+         *               userId:
+         *                 type: integer
+         *               keyName:
+         *                 type: string
+         *               adminEmail:
+         *                 type: string
+         *               adminPassword:
+         *                 type: string
+         *     responses:
+         *       200:
+         *         description: API key generated successfully
+         *       401:
+         *         description: Unauthorized
+         */
+        app.post('/admin/generate-api-key', async (req, res) => {
+            const startTime = Date.now();
+            const adminUserId = this.getUserIdFromSession(req);
+            const { userId, keyName, adminEmail, adminPassword } = req.body;
+
+            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
+            db.query(adminSql, [adminEmail], async (err, adminResults) => {
+                if (err || adminResults.length === 0) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, adminUserId, 'POST', '/admin/generate-api-key', 401, responseTime, req.ip);
+                    return res.status(401).json({ error: "Unauthorized" });
+                }
+
+                const admin = adminResults[0];
+                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
+
+                if (!passwordMatch) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, adminUserId, 'POST', '/admin/generate-api-key', 401, responseTime, req.ip);
+                    return res.status(401).json({ error: "Invalid password" });
+                }
+
+                // Generate API key
+                const apiKey = require('crypto').randomBytes(32).toString('hex');
+                const insertSql = `INSERT INTO api_keys (user_id, api_key, key_name) VALUES (?, ?, ?)`;
+                
+                db.query(insertSql, [userId, apiKey, keyName || 'Default Key'], (err, result) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        const responseTime = Date.now() - startTime;
+                        this.logApiUsage(db, adminUserId, 'POST', '/admin/generate-api-key', 500, responseTime, req.ip);
+                        return res.status(500).json({ error: "Server error.\n" });
+                    }
+
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, adminUserId, 'POST', '/admin/generate-api-key', 200, responseTime, req.ip);
+
+                    res.json({ 
+                        message: "API key generated successfully",
+                        apiKey: apiKey 
+                    });
                 });
             });
         });
