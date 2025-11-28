@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // Step 1: Upload and generate cards
-            const response = await fetch("http://localhost:3000/", {
+            const response = await fetch("https://d1prj-model.onrender.com/upload", {
                 method: "POST",
                 body: formData
             });
