@@ -6,6 +6,10 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const swaggerUI = require('swagger-ui-express');
 const swaggerSpec = require('../docs/FlippyDocs.js');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const xss = require('xss');
+const { body, validationResult } = require('express-validator');
 require('dotenv').config();
 
 const DB_HOST               = process.env.DB_HOST;
@@ -168,6 +172,36 @@ class Main {
             credentials: true
         }));
         
+        // Security headers with helmet
+        app.use(helmet({
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: ["'self'", "'unsafe-inline'"],
+                    styleSrc: ["'self'", "'unsafe-inline'"],
+                    imgSrc: ["'self'", "data:", "https:"],
+                    connectSrc: ["'self'"],
+                    fontSrc: ["'self'"],
+                    objectSrc: ["'none'"],
+                    mediaSrc: ["'self'"],
+                    frameSrc: ["'none'"]
+                }
+            },
+            crossOriginEmbedderPolicy: false // Disable for development
+        }));
+        
+        // Rate limiting - general
+        const generalLimiter = rateLimit({
+            windowMs: 15 * 60 * 1000, // 15 minutes
+            max: 100, // Limit each IP to 100 requests per windowMs
+            message: {
+                error: 'Too many requests from this IP, please try again later'
+            },
+            standardHeaders: true,
+            legacyHeaders: false,
+        });
+        app.use(generalLimiter);
+        
         app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerSpec));
         app.get('/api-docs.json', (req, res) => {
             res.json(swaggerSpec);
@@ -307,15 +341,36 @@ class Main {
          *       409:
          *         description: Email already in use
          */
-        app.post('/signup', async (req, res) => {
+        
+        // Rate limiting for authentication endpoints
+        const authLimiter = rateLimit({
+            windowMs: 15 * 60 * 1000, // 15 minutes
+            max: 5, // Limit each IP to 5 auth attempts per windowMs
+            skipSuccessfulRequests: true,
+            message: {
+                error: 'Too many authentication attempts, please try again later'
+            }
+        });
+        
+        app.post('/signup', authLimiter, async (req, res) => {
             const startTime = Date.now();
-            const { email, password } = req.body;
+            
+            // Validate and sanitize input
+            const validation = this.validateRequestBody(req.body, {
+                email: { type: 'email', options: { maxLength: 255 } },
+                password: { type: 'password', options: { minLength: 6, maxLength: 128 } }
+            });
 
-            if (!this.validateEmail(email)) {
+            if (!validation.isValid) {
                 const responseTime = Date.now() - startTime;
                 this.logApiUsage(db, null, 'POST', '/signup', 400, responseTime, req.ip);
-                return res.status(400).json({ message: "Invalid email format.\n" });
+                return res.status(400).json({ 
+                    message: "Invalid input data", 
+                    errors: validation.errors 
+                });
             }
+
+            const { email, password } = validation.sanitized;
 
             const checkEmailSql = `SELECT email FROM user WHERE email = ?`;
 
@@ -381,9 +436,25 @@ class Main {
          *       401:
          *         description: Invalid credentials
          */
-        app.post('/signin', async (req, res) => {
+        app.post('/signin', authLimiter, async (req, res) => {
             const startTime = Date.now();
-            const { email, password } = req.body;
+            
+            // Validate and sanitize input
+            const validation = this.validateRequestBody(req.body, {
+                email: { type: 'email', options: { maxLength: 255 } },
+                password: { type: 'password', options: { minLength: 1, maxLength: 128 } }
+            });
+
+            if (!validation.isValid) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'POST', '/signin', 400, responseTime, req.ip);
+                return res.status(400).json({ 
+                    message: "Invalid input data", 
+                    errors: validation.errors 
+                });
+            }
+
+            const { email, password } = validation.sanitized;
             const sql = `SELECT * FROM user WHERE email = ?`;
 
             db.query(sql, [email], async (err, results) => {
@@ -493,11 +564,57 @@ class Main {
                     return res.status(403).json({ error: 'No remaining free API calls' });
                 }
 
-                const { name, description, cards } = req.body;
+                const startTime = Date.now();
+                
+                // Validate and sanitize input
+                const validation = this.validateRequestBody(req.body, {
+                    name: { type: 'text', options: { minLength: 1, maxLength: 255 } },
+                    cards: { type: 'text', options: {} } // We'll validate this separately
+                }, {
+                    description: { type: 'text', options: { maxLength: 1000 } }
+                });
 
-                if (!name || !Array.isArray(cards) || cards.length === 0) {
-                    return res.status(400).json({ error: 'Invalid card group data' });
+                if (!validation.isValid) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'POST', '/create-card-group', 400, responseTime, req.ip);
+                    return res.status(400).json({ 
+                        error: 'Invalid input data', 
+                        details: validation.errors 
+                    });
                 }
+
+                const { name, description } = validation.sanitized;
+                let { cards } = req.body;
+
+                // Validate cards array
+                if (!Array.isArray(cards) || cards.length === 0) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'POST', '/create-card-group', 400, responseTime, req.ip);
+                    return res.status(400).json({ error: 'Cards must be a non-empty array' });
+                }
+
+                // Validate each card
+                const sanitizedCards = [];
+                for (let i = 0; i < cards.length; i++) {
+                    const card = cards[i];
+                    const cardValidation = this.validateRequestBody(card, {
+                        question: { type: 'text', options: { minLength: 1, maxLength: 1000 } },
+                        answer: { type: 'text', options: { minLength: 1, maxLength: 1000 } }
+                    });
+                    
+                    if (!cardValidation.isValid) {
+                        const responseTime = Date.now() - startTime;
+                        this.logApiUsage(db, userId, 'POST', '/create-card-group', 400, responseTime, req.ip);
+                        return res.status(400).json({ 
+                            error: `Invalid card ${i + 1}`, 
+                            details: cardValidation.errors 
+                        });
+                    }
+                    
+                    sanitizedCards.push(cardValidation.sanitized);
+                }
+                
+                cards = sanitizedCards;
 
                 const groupSql = `INSERT INTO card_groups (user_id, name, description) VALUES (?, ?, ?)`;
 
@@ -565,7 +682,25 @@ class Main {
          *         description: Unauthorized
          */
         app.delete('/admin/users', async (req, res) => {
-            const { userId, adminEmail, adminPassword } = req.body;
+            const startTime = Date.now();
+            
+            // Validate and sanitize input
+            const validation = this.validateRequestBody(req.body, {
+                userId: { type: 'integer', options: {} },
+                adminEmail: { type: 'email', options: { maxLength: 255 } },
+                adminPassword: { type: 'password', options: { minLength: 1, maxLength: 128 } }
+            });
+
+            if (!validation.isValid) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'DELETE', '/admin/users', 400, responseTime, req.ip);
+                return res.status(400).json({ 
+                    error: 'Invalid input data', 
+                    details: validation.errors 
+                });
+            }
+
+            const { userId, adminEmail, adminPassword } = validation.sanitized;
 
             const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
             db.query(adminSql, [adminEmail], async (err, adminResults) => {
@@ -626,7 +761,30 @@ class Main {
          *         description: Unauthorized
          */
         app.put('/admin/users', async (req, res) => {
-            const { userId, userType: newUserType, apiCallsIncrement, adminEmail, adminPassword } = req.body;
+            const startTime = Date.now();
+            
+            // Validate and sanitize input
+            const validation = this.validateRequestBody(req.body, {
+                userId: { type: 'integer', options: {} },
+                adminEmail: { type: 'email', options: { maxLength: 255 } },
+                adminPassword: { type: 'password', options: { minLength: 1, maxLength: 128 } }
+            }, {
+                userType: { type: 'alphanumeric', options: { maxLength: 50 } },
+                apiCallsIncrement: { type: 'integer', options: {} }
+            });
+
+            if (!validation.isValid) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'PUT', '/admin/users', 400, responseTime, req.ip);
+                return res.status(400).json({ 
+                    error: 'Invalid input data', 
+                    details: validation.errors 
+                });
+            }
+
+            const { userId, adminEmail, adminPassword } = validation.sanitized;
+            const newUserType = validation.sanitized.userType;
+            const apiCallsIncrement = validation.sanitized.apiCallsIncrement;
 
             const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
             db.query(adminSql, [adminEmail], async (err, adminResults) => {
@@ -804,7 +962,27 @@ class Main {
         app.post('/admin/generate-api-key', async (req, res) => {
             const startTime = Date.now();
             const adminUserId = this.getUserIdFromSession(req);
-            const { userId, keyName, adminEmail, adminPassword } = req.body;
+            
+            // Validate and sanitize input
+            const validation = this.validateRequestBody(req.body, {
+                userId: { type: 'integer', options: {} },
+                adminEmail: { type: 'email', options: { maxLength: 255 } },
+                adminPassword: { type: 'password', options: { minLength: 1, maxLength: 128 } }
+            }, {
+                keyName: { type: 'text', options: { maxLength: 255 } }
+            });
+
+            if (!validation.isValid) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, adminUserId, 'POST', '/admin/generate-api-key', 400, responseTime, req.ip);
+                return res.status(400).json({ 
+                    error: 'Invalid input data', 
+                    details: validation.errors 
+                });
+            }
+
+            const { userId, adminEmail, adminPassword } = validation.sanitized;
+            const keyName = validation.sanitized.keyName || `API Key ${Date.now()}`;
 
             const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
             db.query(adminSql, [adminEmail], async (err, adminResults) => {
@@ -951,13 +1129,24 @@ class Main {
                 return res.status(401).json({ error: 'Not authenticated' });
             }
 
-            const { cardId, difficulty = 'medium' } = req.body;
-            
-            if (!cardId) {
+            // Validate and sanitize input
+            const validation = this.validateRequestBody(req.body, {
+                cardId: { type: 'integer', options: {} }
+            }, {
+                difficulty: { type: 'difficulty', options: {} }
+            });
+
+            if (!validation.isValid) {
                 const responseTime = Date.now() - startTime;
                 this.logApiUsage(db, userId, 'POST', '/generate-explanation', 400, responseTime, req.ip);
-                return res.status(400).json({ error: 'Card ID is required' });
+                return res.status(400).json({ 
+                    error: 'Invalid input data', 
+                    details: validation.errors 
+                });
             }
+
+            const { cardId } = validation.sanitized;
+            const difficulty = validation.sanitized.difficulty || 'medium';
 
             // Get the card and verify ownership
             const cardSql = `
@@ -1023,6 +1212,151 @@ class Main {
     static validateEmail(email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
+    }
+
+    /**
+     * Comprehensive input validation and sanitization
+     */
+    static validateAndSanitizeInput(input, type, options = {}) {
+        if (input === null || input === undefined) {
+            return { isValid: false, sanitized: null, error: 'Input is required' };
+        }
+
+        // Convert to string and trim
+        let sanitized = String(input).trim();
+
+        // Check length constraints
+        const minLength = options.minLength || 0;
+        const maxLength = options.maxLength || 1000;
+        
+        if (sanitized.length < minLength) {
+            return { isValid: false, sanitized: null, error: `Input too short (minimum ${minLength} characters)` };
+        }
+        
+        if (sanitized.length > maxLength) {
+            return { isValid: false, sanitized: null, error: `Input too long (maximum ${maxLength} characters)` };
+        }
+
+        // Type-specific validation
+        switch (type) {
+            case 'email':
+                if (!this.validateEmail(sanitized)) {
+                    return { isValid: false, sanitized: null, error: 'Invalid email format' };
+                }
+                // Additional email sanitization - convert to lowercase
+                sanitized = sanitized.toLowerCase();
+                break;
+                
+            case 'password':
+                // Password validation - check for minimum requirements
+                if (sanitized.length < 6) {
+                    return { isValid: false, sanitized: null, error: 'Password must be at least 6 characters' };
+                }
+                // Don't sanitize passwords - they can contain special characters
+                break;
+                
+            case 'text':
+                // Basic HTML/XSS sanitization
+                sanitized = this.sanitizeHtml(sanitized);
+                break;
+                
+            case 'alphanumeric':
+                // Allow only letters, numbers, spaces, and common punctuation
+                if (!/^[a-zA-Z0-9\s\.,!?\-_]+$/.test(sanitized)) {
+                    return { isValid: false, sanitized: null, error: 'Invalid characters detected' };
+                }
+                break;
+                
+            case 'integer':
+                const num = parseInt(sanitized, 10);
+                if (isNaN(num)) {
+                    return { isValid: false, sanitized: null, error: 'Must be a valid number' };
+                }
+                sanitized = num;
+                break;
+                
+            case 'difficulty':
+                if (!['easy', 'medium', 'hard'].includes(sanitized)) {
+                    return { isValid: false, sanitized: null, error: 'Invalid difficulty level' };
+                }
+                break;
+        }
+
+        // Check for potential SQL injection patterns
+        if (this.containsSqlInjection(sanitized)) {
+            return { isValid: false, sanitized: null, error: 'Invalid input detected' };
+        }
+
+        return { isValid: true, sanitized, error: null };
+    }
+
+    /**
+     * Sanitize HTML to prevent XSS
+     */
+    static sanitizeHtml(input) {
+        // Use xss library for comprehensive XSS protection
+        return xss(String(input), {
+            whiteList: {}, // Allow no HTML tags
+            stripIgnoreTag: true,
+            stripIgnoreTagBody: ['script']
+        });
+    }
+
+    /**
+     * Check for common SQL injection patterns
+     */
+    static containsSqlInjection(input) {
+        const sqlPatterns = [
+            /('|(\-\-)|(;)|(\||\|)|(\*|\*))/i,
+            /(union|select|insert|update|delete|drop|create|alter|exec|execute)/i,
+            /(script|javascript|vbscript|onload|onerror|onclick)/i,
+            /(\<|\>|\"|\')/,
+            /(0x[0-9a-f]+)/i,
+            /(\bor\b|\band\b)\s*[=<>]/i
+        ];
+        
+        return sqlPatterns.some(pattern => pattern.test(String(input)));
+    }
+
+    /**
+     * Validate request body structure
+     */
+    static validateRequestBody(body, requiredFields, optionalFields = {}) {
+        const errors = [];
+        const sanitized = {};
+
+        // Check required fields
+        for (const [field, type] of Object.entries(requiredFields)) {
+            if (!(field in body)) {
+                errors.push(`Missing required field: ${field}`);
+                continue;
+            }
+
+            const validation = this.validateAndSanitizeInput(body[field], type.type, type.options || {});
+            if (!validation.isValid) {
+                errors.push(`${field}: ${validation.error}`);
+            } else {
+                sanitized[field] = validation.sanitized;
+            }
+        }
+
+        // Check optional fields
+        for (const [field, type] of Object.entries(optionalFields)) {
+            if (field in body && body[field] !== null && body[field] !== undefined) {
+                const validation = this.validateAndSanitizeInput(body[field], type.type, type.options || {});
+                if (!validation.isValid) {
+                    errors.push(`${field}: ${validation.error}`);
+                } else {
+                    sanitized[field] = validation.sanitized;
+                }
+            }
+        }
+
+        return {
+            isValid: errors.length === 0,
+            errors,
+            sanitized
+        };
     }
 
     /**
