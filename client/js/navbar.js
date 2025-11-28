@@ -6,7 +6,6 @@ async function loadNavbar() {
         headerElement.innerHTML = html;
 
         Auth.init();
-        Auth.updateNavigation();
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', (e) => {

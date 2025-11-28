@@ -107,9 +107,10 @@ class AdminPanel {
      */
     attachEventListeners() {
         // Initial password form
-        this.elements.initialPasswordForm.addEventListener('submit', (e) => {
+        this.elements.initialPasswordForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            this.verifyInitialPassword();
+            console.log('Initial password form submitted');
+            await this.verifyInitialPassword();
         });
 
         // Action password form
@@ -150,8 +151,11 @@ class AdminPanel {
      * Verify initial password
      */
     async verifyInitialPassword() {
+        console.log('verifyInitialPassword called');
         const password = this.elements.initialPasswordInput.value;
         const email = Auth.getUserEmail();
+        
+        console.log('Email:', email, 'Password length:', password.length);
 
         const submitBtn = this.elements.initialPasswordForm.querySelector('button[type="submit"]');
         const originalText = submitBtn.textContent;
@@ -159,6 +163,7 @@ class AdminPanel {
         submitBtn.textContent = 'Verifying...';
 
         try {
+            console.log('Fetching:', `${this.SERVER_URL}/signin`);
             const response = await fetch(`${this.SERVER_URL}/signin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -166,10 +171,20 @@ class AdminPanel {
             });
 
             const result = await response.json();
+            console.log('Response status:', response.status, 'Result:', result);
 
             if (response.ok && result.userType === 'admin') {
+                console.log('Admin verified, updating session storage');
+                // Update session storage to ensure Auth knows user is verified
+                sessionStorage.setItem('isLoggedIn', 'true');
+                sessionStorage.setItem('userEmail', result.email || email);
+                sessionStorage.setItem('userType', result.userType);
+                
+                console.log('Calling hideInitialPasswordModal');
                 this.hideInitialPasswordModal();
+                console.log('Modal hidden, content should be visible');
             } else {
+                console.log('Verification failed - not admin or wrong password');
                 this.elements.initialPasswordError.textContent = 'Invalid password or not an admin';
             }
         } catch (error) {
@@ -178,6 +193,7 @@ class AdminPanel {
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = originalText;
+            console.log('verifyInitialPassword completed');
         }
     }
 
@@ -441,6 +457,6 @@ class AdminPanel {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    Auth.init();
+    // Auth.init();
     new AdminPanel();
 });
