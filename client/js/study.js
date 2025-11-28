@@ -19,6 +19,13 @@ class StudyPage {
             regenerateBtn: document.getElementById('regenerateExplanationBtn')
         };
 
+        // Debug: Check if elements are found
+        console.log('Elements initialized:', {
+            regenerateBtn: this.elements.regenerateBtn,
+            difficultySelect: this.elements.difficultySelect,
+            explanationModal: this.elements.explanationModal
+        });
+
         this.loadCardGroups();
         this.attachModalListeners();
     }
@@ -203,8 +210,10 @@ class StudyPage {
      * Request explanation for a card
      */
     async requestExplanation(cardId) {
+        console.log('Requesting explanation for card:', cardId);
         this.currentCard = cardId;
         const difficulty = this.elements.difficultySelect.value;
+        console.log('Selected difficulty:', difficulty);
 
         // Show modal
         this.elements.explanationModal.style.display = 'flex';
@@ -214,12 +223,15 @@ class StudyPage {
             const response = await fetch(`${this.SERVER_URL}/generate-explanation`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Important: include cookies for authentication
                 body: JSON.stringify({ cardId, difficulty })
             });
 
             const result = await response.json();
+            console.log('Server response:', result);
 
             if (!response.ok) {
+                console.error('Server error:', response.status, result);
                 throw new Error(result.error || 'Failed to generate explanation');
             }
 
@@ -231,12 +243,13 @@ class StudyPage {
                 </div>
             `;
 
+            console.log('Explanation generated successfully');
             // Reload the card to show the new explanation
             await this.loadCardGroups();
         } catch (error) {
             console.error('Generate explanation error:', error);
             this.elements.explanationContent.innerHTML = `
-                <p class="error-text">Failed to generate explanation. Please try again.</p>
+                <p class="error-text">Failed to generate explanation: ${error.message}</p>
             `;
         }
     }
@@ -245,11 +258,22 @@ class StudyPage {
      * Attach modal event listeners
      */
     attachModalListeners() {
-        this.elements.regenerateBtn.addEventListener('click', () => {
-            if (this.currentCard) {
-                this.requestExplanation(this.currentCard);
-            }
-        });
+        if (this.elements.regenerateBtn) {
+            this.elements.regenerateBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Regenerate button clicked, currentCard:', this.currentCard);
+                
+                if (this.currentCard) {
+                    this.requestExplanation(this.currentCard);
+                } else {
+                    console.error('No current card selected for regeneration');
+                    alert('Please select a card first');
+                }
+            });
+            console.log('Regenerate button listener attached successfully');
+        } else {
+            console.error('Regenerate button element not found!');
+        }
     }
 
     /**
@@ -267,6 +291,19 @@ class StudyPage {
  */
 function closeExplanationModal() {
     document.getElementById('explanationModal').style.display = 'none';
+}
+
+/**
+ * Test function for regenerate button (can be called from console)
+ */
+function testRegenerateButton() {
+    console.log('Testing regenerate button...');
+    if (studyPage && studyPage.currentCard) {
+        console.log('Current card:', studyPage.currentCard);
+        studyPage.requestExplanation(studyPage.currentCard);
+    } else {
+        console.log('No study page or current card available');
+    }
 }
 
 // Initialize on page load

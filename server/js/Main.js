@@ -846,6 +846,174 @@ class Main {
             });
         });
 
+        /**
+         * @swagger
+         * /card-groups:
+         *   get:
+         *     summary: Get user's card groups with cards
+         *     tags: [Cards]
+         *     security:
+         *       - cookieAuth: []
+         *     responses:
+         *       200:
+         *         description: User's card groups retrieved successfully
+         *       401:
+         *         description: Not authenticated
+         */
+        app.get('/card-groups', (req, res) => {
+            const startTime = Date.now();
+            const userId = this.getUserIdFromSession(req);
+            
+            if (!userId) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'GET', '/card-groups', 401, responseTime, req.ip);
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            // Get card groups for the user
+            const groupsSql = `SELECT id, name, description, created_at FROM card_groups WHERE user_id = ? ORDER BY created_at DESC`;
+            
+            db.query(groupsSql, [userId], (err, groups) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'GET', '/card-groups', 500, responseTime, req.ip);
+                    return res.status(500).json({ error: 'Server error' });
+                }
+
+                if (groups.length === 0) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'GET', '/card-groups', 200, responseTime, req.ip);
+                    return res.json({ groups: [] });
+                }
+
+                // Get cards for each group
+                const groupIds = groups.map(group => group.id);
+                const cardsSql = `SELECT * FROM cards WHERE group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY id ASC`;
+                
+                db.query(cardsSql, groupIds, (err, cards) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        const responseTime = Date.now() - startTime;
+                        this.logApiUsage(db, userId, 'GET', '/card-groups', 500, responseTime, req.ip);
+                        return res.status(500).json({ error: 'Server error' });
+                    }
+
+                    // Organize cards by group
+                    const groupsWithCards = groups.map(group => ({
+                        ...group,
+                        cards: cards.filter(card => card.group_id === group.id)
+                    }));
+
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'GET', '/card-groups', 200, responseTime, req.ip);
+                    
+                    res.json({ groups: groupsWithCards });
+                });
+            });
+        });
+
+        /**
+         * @swagger
+         * /generate-explanation:
+         *   post:
+         *     summary: Generate AI explanation for a card
+         *     tags: [Cards]
+         *     security:
+         *       - cookieAuth: []
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - cardId
+         *             properties:
+         *               cardId:
+         *                 type: integer
+         *               difficulty:
+         *                 type: string
+         *                 enum: [easy, medium, hard]
+         *     responses:
+         *       200:
+         *         description: Explanation generated successfully
+         *       401:
+         *         description: Not authenticated
+         */
+        app.post('/generate-explanation', async (req, res) => {
+            const startTime = Date.now();
+            const userId = this.getUserIdFromSession(req);
+            
+            if (!userId) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, null, 'POST', '/generate-explanation', 401, responseTime, req.ip);
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            const { cardId, difficulty = 'medium' } = req.body;
+            
+            if (!cardId) {
+                const responseTime = Date.now() - startTime;
+                this.logApiUsage(db, userId, 'POST', '/generate-explanation', 400, responseTime, req.ip);
+                return res.status(400).json({ error: 'Card ID is required' });
+            }
+
+            // Get the card and verify ownership
+            const cardSql = `
+                SELECT c.*, cg.user_id 
+                FROM cards c 
+                JOIN card_groups cg ON c.group_id = cg.id 
+                WHERE c.id = ? AND cg.user_id = ?
+            `;
+            
+            db.query(cardSql, [cardId, userId], async (err, cardResults) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'POST', '/generate-explanation', 500, responseTime, req.ip);
+                    return res.status(500).json({ error: 'Server error' });
+                }
+
+                if (cardResults.length === 0) {
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'POST', '/generate-explanation', 404, responseTime, req.ip);
+                    return res.status(404).json({ error: 'Card not found or access denied' });
+                }
+
+                const card = cardResults[0];
+                
+                // Generate explanation using the same logic as the API
+                const explanation = this.generateExplanation(card.question, card.answer, difficulty);
+                
+                // Update the card with the new explanation
+                const updateSql = `
+                    UPDATE cards 
+                    SET explanation_text = ?, explanation_difficulty = ?, explanation_generated_at = CURRENT_TIMESTAMP 
+                    WHERE id = ?
+                `;
+                
+                db.query(updateSql, [explanation, difficulty, cardId], (err, result) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        const responseTime = Date.now() - startTime;
+                        this.logApiUsage(db, userId, 'POST', '/generate-explanation', 500, responseTime, req.ip);
+                        return res.status(500).json({ error: 'Failed to save explanation' });
+                    }
+
+                    const responseTime = Date.now() - startTime;
+                    this.logApiUsage(db, userId, 'POST', '/generate-explanation', 200, responseTime, req.ip);
+                    
+                    res.json({
+                        success: true,
+                        explanation,
+                        difficulty,
+                        cardId
+                    });
+                });
+            });
+        });
+
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
             console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
@@ -855,6 +1023,19 @@ class Main {
     static validateEmail(email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
+    }
+
+    /**
+     * Generate AI explanation based on difficulty level
+     */
+    static generateExplanation(question, answer, difficulty) {
+        const templates = {
+            easy: `Let me explain this in simple terms:\n\nQuestion: ${question}\n\nAnswer: ${answer}\n\nIn other words: This means ${answer.toLowerCase()}. Think of it as a straightforward concept that you can apply directly.`,
+            medium: `Here's a detailed explanation:\n\nQuestion: ${question}\n\nAnswer: ${answer}\n\nExplanation: The answer addresses the question by providing ${answer}. This involves understanding the relationship between the question's key concepts and how they connect to form the solution. Consider the context and how this applies to similar scenarios.`,
+            hard: `Advanced Analysis:\n\nQuestion: ${question}\n\nAnswer: ${answer}\n\nDeep Dive: This answer represents a complex concept that requires understanding multiple layers. First, consider the theoretical foundation behind why ${answer} is the correct response. Then, analyze the implications of this answer in broader contexts. Think critically about edge cases, alternative interpretations, and how this knowledge connects to advanced topics in the field.`
+        };
+
+        return templates[difficulty] || templates.medium;
     }
 }
 
