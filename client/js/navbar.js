@@ -5,7 +5,9 @@ async function loadNavbar() {
         const html = await response.text();
         headerElement.innerHTML = html;
 
-        Auth.init();
+        // Initialize auth after navbar is loaded
+        Auth.updateNavigation();
+        
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', (e) => {
