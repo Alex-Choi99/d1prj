@@ -1,6 +1,11 @@
 const http = require('http');
 const mysql = require('mysql');
 const bcrypt = require('bcrypt');
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const swaggerUI = require('swagger-ui-express');
+const swaggerSpec = require('../docs/FlippyDocs.js');
 require('dotenv').config();
 
 const DB_HOST               = process.env.DB_HOST;
@@ -155,700 +160,478 @@ class Main {
      * Run HTTP Server
      */
     static runServer(db) {
-        const server = http.createServer((req, res) => {
-            switch (req.method) {
-                case OPTIONS:
-                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
-                    res.setHeader(CORS.METHODS, `${GET}, ${POST}, ${PUT}, ${DELETE}, ${OPTIONS}`);
-                    res.setHeader(CORS.HEADERS, `${HEADER_CONTENT_TYPE}, Cookie`);
-                    res.setHeader('Access-Control-Allow-Credentials', 'true');
-                    res.end();
-                    break;
-
-                case GET:
-                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
-                    res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-                    if (req.url === '/verify-session') {
-                        const cookies = this.parseCookies(req);
-                        const token = cookies[SESSION_COOKIE_NAME];
-                        const session = this.validateSession(token);
-
-                        res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                        if (session) {
-                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({
-                                valid: true,
-                                email: session.email,
-                                userId: session.userId
-                            }));
-                        } else {
-                            res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ valid: false }));
-                        }
-                    } else if (req.url === '/admin/users') {
-                        const sql = `SELECT id, email, userType, remaining_free_api_calls FROM user`;
-
-                        db.query(sql, (err, results) => {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                            if (err) {
-                                console.error('Database error:', err);
-                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                return;
-                            }
-
-                            console.log('Admin users query result:', JSON.stringify(results[0]));
-                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ users: results }));
-                        });
-                    } else if (req.url === '/card-groups') {
-                        // Get all card groups with their cards for the logged-in user
-                        console.log('[/card-groups] Request received');
-                        
-                        let userId;
-                        try {
-                            userId = this.getUserIdFromSession(req);
-                            console.log('[/card-groups] userId from session:', userId);
-                        } catch (error) {
-                            console.error('[/card-groups] Error getting userId:', error);
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-                            res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ error: 'Session error' }));
-                            return;
-                        }
-                        
-                        if (!userId) {
-                            console.log('[/card-groups] No userId - not authenticated');
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-                            res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ error: 'Not authenticated' }));
-                            return;
-                        }
-
-                        const sql = `
-                            SELECT 
-                                cg.id as group_id,
-                                cg.name as group_name,
-                                cg.description as group_description,
-                                cg.created_at as group_created_at,
-                                c.id as card_id,
-                                c.question,
-                                c.answer,
-                                c.explanation_text,
-                                c.explanation_difficulty,
-                                c.explanation_generated_at,
-                                c.created_at as card_created_at
-                            FROM card_groups cg
-                            LEFT JOIN cards c ON cg.id = c.group_id
-                            WHERE cg.user_id = ?
-                            ORDER BY cg.created_at DESC, c.created_at ASC
-                        `;
-
-                        console.log('[/card-groups] Executing query for userId:', userId);
-
-                        db.query(sql, [userId], (err, results) => {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                            if (err) {
-                                console.error('[/card-groups] Database error:', err);
-                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                return;
-                            }
-
-                            console.log('[/card-groups] Query returned', results.length, 'rows');
-
-                            // Transform flat results into nested structure
-                            const groupsMap = new Map();
-                            
-                            try {
-                                results.forEach(row => {
-                                    if (!groupsMap.has(row.group_id)) {
-                                        groupsMap.set(row.group_id, {
-                                            id: row.group_id,
-                                            name: row.group_name,
-                                            description: row.group_description,
-                                            created_at: row.group_created_at,
-                                            cards: []
-                                        });
-                                    }
-                                    
-                                    if (row.card_id) {
-                                        groupsMap.get(row.group_id).cards.push({
-                                            id: row.card_id,
-                                            question: row.question,
-                                            answer: row.answer,
-                                            explanation_text: row.explanation_text,
-                                            explanation_difficulty: row.explanation_difficulty,
-                                            explanation_generated_at: row.explanation_generated_at,
-                                            created_at: row.card_created_at
-                                        });
-                                    }
-                                });
-
-                                const groups = Array.from(groupsMap.values());
-                                console.log('[/card-groups] Returning', groups.length, 'groups');
-
-                                res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ groups }));
-                            } catch (transformError) {
-                                console.error('[/card-groups] Error transforming results:', transformError);
-                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ error: 'Data transformation error' }));
-                            }
-                        });
-                    } else if (req.url === '/profile') {
-                        const userId = this.getUserIdFromSession(req);
-                        
-                        if (!userId) {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-                            res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ error: 'Not authenticated' }));
-                            return;
-                        }
-
-                        const sql = `SELECT email, userType, remaining_free_api_calls FROM user WHERE id = ?`;
-                        db.query(sql, [userId], (err, results) => {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                            if (err || results.length === 0) {
-                                console.error('Database error:', err);
-                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                return;
-                            }
-
-                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify(results[0]));
-                        });
-                    } else if (req.url === '/admin/endpoint-stats') {
-                        // Get endpoint statistics
-                        const sql = `
-                            SELECT 
-                                method,
-                                endpoint,
-                                COUNT(*) as request_count,
-                                AVG(response_time_ms) as avg_response_time,
-                                MAX(request_timestamp) as last_request
-                            FROM api_usage_log
-                            GROUP BY method, endpoint
-                            ORDER BY request_count DESC
-                        `;
-
-                        db.query(sql, (err, results) => {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                            if (err) {
-                                console.error('Database error:', err);
-                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                return;
-                            }
-
-                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ stats: results }));
-                        });
-                    } else if (req.url === '/admin/user-api-usage') {
-                        // Get per-user API consumption with tokens
-                        const sql = `
-                            SELECT 
-                                u.id as user_id,
-                                u.email,
-                                u.userType,
-                                COALESCE(ak.api_key, 'N/A') as api_key,
-                                COALESCE(ak.key_name, 'No Key') as key_name,
-                                COUNT(aul.id) as total_requests,
-                                u.remaining_free_api_calls
-                            FROM user u
-                            LEFT JOIN api_keys ak ON u.id = ak.user_id AND ak.is_active = TRUE
-                            LEFT JOIN api_usage_log aul ON u.id = aul.user_id
-                            GROUP BY u.id, u.email, u.userType, ak.api_key, ak.key_name, u.remaining_free_api_calls
-                            ORDER BY total_requests DESC
-                        `;
-
-                        db.query(sql, (err, results) => {
-                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                            if (err) {
-                                console.error('Database error:', err);
-                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                return;
-                            }
-
-                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                            res.end(JSON.stringify({ users: results }));
-                        });
-                    } else {
-                        res.writeHead(404, { 
-                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                        });
-                        res.end(JSON.stringify({ error: NOT_FOUND_MSG }));
-                    }
-                    break;
-
-                case POST:
-                    let body = BODY_DEFAULT;
-
-                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
-                    res.setHeader('Access-Control-Allow-Credentials', 'true');
-                    req.on(DATA, chunk => body += chunk.toString());
-
-                    req.on(END, () => {
-                        try {
-                            const parsed = JSON.parse(body);
-                            const email = parsed.email;
-                            const password = parsed.password;
-
-                            if (req.url === '/signup') {
-                                if (!this.validateEmail(email)) {
-                                    res.writeHead(400, { 
-                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                        [CORS.ORIGIN]: CLIENT_ORIGIN
-                                    });
-                                    res.end(JSON.stringify({ message: INVALID_EMAIL_MSG }));
-                                    return;
-                                }
-
-                                const checkEmailSql = `SELECT email FROM user WHERE email = ?`;
-
-                                db.query(checkEmailSql, [email], async (err, results) => {
-                                    if (results.length > 0) {
-                                        res.writeHead(409, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ message: EMAIL_ALREADY_IN_USE_MSG }));
-                                        return;
-                                    }
-                                    
-                                    if (err) {
-                                        console.error('Database error:', err);
-                                        res.writeHead(500, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: err })); 
-                                        return;
-                                    }
-
-                                    const hashedPassword = await bcrypt.hash(password, 8);
-                                    const insertSql = `INSERT INTO user (email, password) VALUES (?, ?)`;
-
-                                    db.query(insertSql, [email, hashedPassword], (err, result) => {
-                                        res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                                        if (err) {
-                                            console.error('Database error:', err);
-                                            res.writeHead(400, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                            res.end(JSON.stringify({ message: POST_FAIL_MSG }));
-                                        } else {
-                                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                            res.end(JSON.stringify({
-                                                message: POST_SUCCESS_MSG,
-                                                userId: result.insertId
-                                            }));
-                                        }
-                                    });
-                                });
-                            } else if (req.url === '/signin') {
-                                const sql = `SELECT * FROM user WHERE email = ?`;
-
-                                db.query(sql, [email], async (err, results) => {
-                                    res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                                    if (err) {
-                                        console.error('Database error:', err);
-                                        res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                        return;
-                                    }
-
-                                    if (results.length === 0) {
-                                        res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                        res.end(JSON.stringify({ error: INVALID_INPUT_MSG }));
-                                        return;
-                                    }
-
-                                    const user = results[0];
-
-                                    // Compare password with hashed password
-                                    const passwordMatch = await bcrypt.compare(password, user.password);
-
-                                    if (passwordMatch) {
-                                        // Generate session token
-                                        const sessionToken = this.generateSessionToken();
-                                        const maxAge = SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-                                        
-                                        // Store session
-                                        sessions.set(sessionToken, {
-                                            email: user.email,
-                                            userId: user.id,
-                                            createdAt: Date.now(),
-                                            expiresAt: Date.now() + maxAge
-                                        });
-
-                                        // Set cookie
-                                        this.setCookie(res, SESSION_COOKIE_NAME, sessionToken, maxAge);
-
-                                        res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                        res.end(JSON.stringify({
-                                            message: "Sign in successful",
-                                            email: user.email,
-                                            userType: user.userType || 'user',
-                                            userId: user.id
-                                        }));
-                                    } else {
-                                        res.writeHead(401, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                        res.end(JSON.stringify({ error: INVALID_INPUT_MSG }) );
-                                    }
-                                });
-                            } else if (req.url === '/create-card-group') {
-                                // Get user ID from session
-                                console.log('Create card group request received');
-                                console.log('Request headers:', req.headers);
-                                
-                                const userId = this.getUserIdFromSession(req);
-                                console.log('User ID from session:', userId);
-                                
-                                if (!userId) {
-                                    console.log('Authentication failed - no userId');
-                                    res.writeHead(401, { 
-                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                        [CORS.ORIGIN]: CLIENT_ORIGIN
-                                    });
-                                    res.end(JSON.stringify({ error: 'Not authenticated' }));
-                                    return;
-                                }
-
-                                // Check remaining API calls
-                                const checkCallsSql = `SELECT remaining_free_api_calls FROM user WHERE id = ?`;
-                                db.query(checkCallsSql, [userId], (err, userResults) => {
-                                    if (err || userResults.length === 0) {
-                                        res.writeHead(500, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: 'Failed to verify user' }));
-                                        return;
-                                    }
-
-                                    if (userResults[0].remaining_free_api_calls <= 0) {
-                                        res.writeHead(403, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: 'No remaining free API calls' }));
-                                        return;
-                                    }
-
-                                    const { name, description, cards } = parsed;
-
-                                    if (!name || !Array.isArray(cards) || cards.length === 0) {
-                                        res.writeHead(400, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: 'Invalid card group data' }));
-                                        return;
-                                    }
-
-                                // Insert card group
-                                const groupSql = `INSERT INTO card_groups (user_id, name, description) VALUES (?, ?, ?)`;
-
-                                db.query(groupSql, [userId, name, description || ''], (err, groupResult) => {
-                                    if (err) {
-                                        console.error('Database error:', err);
-                                        res.writeHead(500, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: 'Failed to create card group' }));
-                                        return;
-                                    }
-
-                                    const groupId = groupResult.insertId;
-
-                                    // Insert all cards
-                                    const cardSql = `INSERT INTO cards (group_id, question, answer) VALUES ?`;
-                                    const cardValues = cards.map(card => [groupId, card.question, card.answer]);
-
-                                    db.query(cardSql, [cardValues], (err, cardResult) => {
-                                        res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                                        if (err) {
-                                            console.error('Database error:', err);
-                                            res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                            res.end(JSON.stringify({ error: 'Failed to create cards' }));
-                                            return;
-                                        }
-
-                                        // Decrement remaining_free_api_calls
-                                        const decrementSql = `UPDATE user SET remaining_free_api_calls = remaining_free_api_calls - 1 WHERE id = ?`;
-                                        db.query(decrementSql, [userId], (err) => {
-                                            if (err) {
-                                                console.error('Failed to decrement API calls:', err);
-                                            }
-
-                                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                            res.end(JSON.stringify({
-                                                message: 'Card group created successfully',
-                                                groupId: groupId,
-                                                cardsCreated: cardResult.affectedRows,
-                                                remainingApiCalls: userResults[0].remaining_free_api_calls - 1
-                                            }));
-                                        });
-                                    });
-                                });
-                                });
-                            } else if (req.url === '/generate-explanation') {
-                                // Proxy explanation generation to API microservice
-                                const userId = this.getUserIdFromSession(req);
-                                
-                                if (!userId) {
-                                    res.writeHead(401, { 
-                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                        [CORS.ORIGIN]: CLIENT_ORIGIN
-                                    });
-                                    res.end(JSON.stringify({ error: 'Not authenticated' }));
-                                    return;
-                                }
-
-                                const { cardId, difficulty } = parsed;
-
-                                if (!cardId) {
-                                    res.writeHead(400, { 
-                                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                        [CORS.ORIGIN]: CLIENT_ORIGIN
-                                    });
-                                    res.end(JSON.stringify({ error: 'Card ID required' }));
-                                    return;
-                                }
-
-                                // Fetch card data
-                                const cardSql = `SELECT c.*, cg.user_id FROM cards c 
-                                               JOIN card_groups cg ON c.group_id = cg.id 
-                                               WHERE c.id = ? AND cg.user_id = ?`;
-                                
-                                db.query(cardSql, [cardId, userId], async (err, cardResults) => {
-                                    if (err || cardResults.length === 0) {
-                                        res.writeHead(404, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: 'Card not found' }));
-                                        return;
-                                    }
-
-                                    const card = cardResults[0];
-
-                                    // Call API microservice to generate explanation
-                                    try {
-                                        const apiResponse = await fetch(`${API_SERVICE_URL}/api/explanations`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                question: card.question,
-                                                answer: card.answer,
-                                                sourceText: `${card.question}\n${card.answer}`,
-                                                difficulty: difficulty || 'medium'
-                                            })
-                                        });
-
-                                        const explanation = await apiResponse.json();
-
-                                        if (!apiResponse.ok) {
-                                            throw new Error('API service error');
-                                        }
-
-                                        // Store explanation in database
-                                        const updateSql = `UPDATE cards 
-                                                         SET explanation_text = ?, 
-                                                             explanation_difficulty = ?,
-                                                             explanation_generated_at = CURRENT_TIMESTAMP
-                                                         WHERE id = ?`;
-                                        
-                                        db.query(updateSql, [explanation.explanation, difficulty || 'medium', cardId], (err) => {
-                                            res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-                                            
-                                            if (err) {
-                                                console.error('Failed to store explanation:', err);
-                                                res.writeHead(500, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                                res.end(JSON.stringify({ error: 'Failed to store explanation' }));
-                                                return;
-                                            }
-
-                                            res.writeHead(200, { [CORS.ORIGIN]: CLIENT_ORIGIN });
-                                            res.end(JSON.stringify({
-                                                message: 'Explanation generated successfully',
-                                                explanation: explanation.explanation,
-                                                difficulty: difficulty || 'medium'
-                                            }));
-                                        });
-                                    } catch (apiError) {
-                                        console.error('API service error:', apiError);
-                                        res.writeHead(500, { 
-                                            [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                            [CORS.ORIGIN]: CLIENT_ORIGIN
-                                        });
-                                        res.end(JSON.stringify({ error: 'Failed to generate explanation' }));
-                                    }
-                                });
-                            }
-                        }
-                        catch (error) {
-                            console.error('Server error:', error);
-                            res.writeHead(500, { 
-                                [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                                [CORS.ORIGIN]: CLIENT_ORIGIN
-                            });
-                            res.end(JSON.stringify({ error: "Server error" }));
-                        }
-                    });
-                    break;
-
-                case DELETE:
-                    let deleteBody = BODY_DEFAULT;
-
-                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
-                    req.on(DATA, chunk => deleteBody += chunk.toString());
-
-                    req.on(END, async () => {
-                        try {
-                            const parsed = JSON.parse(deleteBody);
-                            const userId = parsed.userId;
-                            const adminEmail = parsed.adminEmail;
-                            const adminPassword = parsed.adminPassword;
-
-                            // Verify admin credentials
-                            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
-                            db.query(adminSql, [adminEmail], async (err, adminResults) => {
-                                res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                                if (err || adminResults.length === 0) {
-                                    res.writeHead(401);
-                                    res.end(JSON.stringify({ error: "Unauthorized" }));
-                                    return;
-                                }
-
-                                const admin = adminResults[0];
-                                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
-
-                                if (!passwordMatch) {
-                                    res.writeHead(401);
-                                    res.end(JSON.stringify({ error: "Invalid password" }));
-                                    return;
-                                }
-
-                                // Delete user
-                                const deleteSql = `DELETE FROM user WHERE id = ?`;
-                                db.query(deleteSql, [userId], (err, result) => {
-                                    if (err) {
-                                        console.error('Database error:', err);
-                                        res.writeHead(500);
-                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                        return;
-                                    }
-
-                                    res.writeHead(200);
-                                    res.end(JSON.stringify({ message: "User deleted successfully" }));
-                                });
-                            });
-                        } catch (error) {
-                            console.error('Server error:', error);
-                            res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                            res.end(JSON.stringify({ error: "Server error" }));
-                        }
-                    });
-                    break;
-
-                case PUT:
-                    let putBody = BODY_DEFAULT;
-
-                    res.setHeader(CORS.ORIGIN, CLIENT_ORIGIN);
-                    req.on(DATA, chunk => putBody += chunk.toString());
-
-                    req.on(END, async () => {
-                        try {
-                            const parsed = JSON.parse(putBody);
-                            const userId = parsed.userId;
-                            const newUserType = parsed.userType;
-                            const apiCallsIncrement = parsed.apiCallsIncrement;
-                            const adminEmail = parsed.adminEmail;
-                            const adminPassword = parsed.adminPassword;
-
-                            // Verify admin credentials
-                            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
-                            db.query(adminSql, [adminEmail], async (err, adminResults) => {
-                                res.setHeader(HEADER_CONTENT_TYPE, HEADER_JSON_CONTENT);
-
-                                if (err || adminResults.length === 0) {
-                                    res.writeHead(401);
-                                    res.end(JSON.stringify({ error: "Unauthorized" }));
-                                    return;
-                                }
-
-                                const admin = adminResults[0];
-                                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
-
-                                if (!passwordMatch) {
-                                    res.writeHead(401);
-                                    res.end(JSON.stringify({ error: "Invalid password" }));
-                                    return;
-                                }
-
-                                // Determine what to update
-                                let updateSql, updateParams;
-                                if (newUserType && apiCallsIncrement) {
-                                    updateSql = `UPDATE user SET userType = ?, remaining_free_api_calls = remaining_free_api_calls + ? WHERE id = ?`;
-                                    updateParams = [newUserType, apiCallsIncrement, userId];
-                                } else if (newUserType) {
-                                    updateSql = `UPDATE user SET userType = ? WHERE id = ?`;
-                                    updateParams = [newUserType, userId];
-                                } else if (apiCallsIncrement) {
-                                    updateSql = `UPDATE user SET remaining_free_api_calls = remaining_free_api_calls + ? WHERE id = ?`;
-                                    updateParams = [apiCallsIncrement, userId];
-                                } else {
-                                    res.writeHead(400);
-                                    res.end(JSON.stringify({ error: "No update parameters provided" }));
-                                    return;
-                                }
-
-                                db.query(updateSql, updateParams, (err, result) => {
-                                    if (err) {
-                                        console.error('Database error:', err);
-                                        res.writeHead(500);
-                                        res.end(JSON.stringify({ error: SERVER_ERROR_MSG }));
-                                        return;
-                                    }
-
-                                    res.writeHead(200);
-                                    res.end(JSON.stringify({ message: "User updated successfully" }));
-                                });
-                            });
-                        } catch (error) {
-                            console.error('Server error:', error);
-                            res.writeHead(500, { [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT });
-                            res.end(JSON.stringify({ error: "Server error" }));
-                        }
-                    });
-                    break;
-
-                default:
-                    res.writeHead(404, { 
-                        [HEADER_CONTENT_TYPE]: HEADER_JSON_CONTENT,
-                        [CORS.ORIGIN]: CLIENT_ORIGIN
-                    });
-                    res.end(JSON.stringify({ error: NOT_FOUND_MSG }) );
+        const app = express();
+        app.use(express.json());
+        app.use(cookieParser());
+        app.use(cors({
+            origin: CLIENT_ORIGIN,
+            credentials: true
+        }));
+        
+        app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerSpec));
+        app.get('/api-docs.json', (req, res) => {
+            res.json(swaggerSpec);
+        });
+
+        /**
+         * @swagger
+         * /verify-session:
+         *   get:
+         *     summary: Verify user session
+         *     tags: [Authentication]
+         *     security:
+         *       - cookieAuth: []
+         *     responses:
+         *       200:
+         *         description: Session valid
+         *       401:
+         *         description: Invalid or expired session
+         */
+        app.get('/verify-session', (req, res) => {
+            const token = req.cookies[SESSION_COOKIE_NAME];
+            const session = this.validateSession(token);
+
+            if (session) {
+                res.json({
+                    valid: true,
+                    email: session.email,
+                    userId: session.userId
+                });
+            } else {
+                res.status(401).json({ valid: false });
             }
         });
 
-        server.listen(PORT, () => {
+        /**
+         * @swagger
+         * /admin/users:
+         *   get:
+         *     summary: Get all users (Admin only)
+         *     tags: [Admin]
+         *     security:
+         *       - cookieAuth: []
+         *     responses:
+         *       200:
+         *         description: List of all users
+         *       500:
+         *         description: Server error
+         */
+        app.get('/admin/users', (req, res) => {
+            const sql = `SELECT id, email, userType, remaining_free_api_calls FROM user`;
+
+            db.query(sql, (err, results) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ error: "Server error.\n" });
+                }
+
+                console.log('Admin users query result:', JSON.stringify(results[0]));
+                res.json({ users: results });
+            });
+        });
+
+        /**
+         * @swagger
+         * /profile:
+         *   get:
+         *     summary: Get user profile
+         *     tags: [User]
+         *     security:
+         *       - cookieAuth: []
+         *     responses:
+         *       200:
+         *         description: User profile retrieved
+         *       401:
+         *         description: Not authenticated
+         */
+        app.get('/profile', (req, res) => {
+            const userId = this.getUserIdFromSession(req);
+            
+            if (!userId) {
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            const sql = `SELECT email, userType, remaining_free_api_calls FROM user WHERE id = ?`;
+            db.query(sql, [userId], (err, results) => {
+                if (err || results.length === 0) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ error: "Server error.\n" });
+                }
+
+                res.json(results[0]);
+            });
+        });
+
+        /**
+         * @swagger
+         * /signup:
+         *   post:
+         *     summary: Register a new user
+         *     tags: [Authentication]
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - email
+         *               - password
+         *             properties:
+         *               email:
+         *                 type: string
+         *                 format: email
+         *               password:
+         *                 type: string
+         *                 format: password
+         *     responses:
+         *       200:
+         *         description: User registered successfully
+         *       400:
+         *         description: Invalid email format
+         *       409:
+         *         description: Email already in use
+         */
+        app.post('/signup', async (req, res) => {
+            const { email, password } = req.body;
+
+            if (!this.validateEmail(email)) {
+                return res.status(400).json({ message: "Invalid email format.\n" });
+            }
+
+            const checkEmailSql = `SELECT email FROM user WHERE email = ?`;
+
+            db.query(checkEmailSql, [email], async (err, results) => {
+                if (results.length > 0) {
+                    return res.status(409).json({ message: "Email already in use.\n" });
+                }
+                
+                if (err) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ error: err });
+                }
+
+                const hashedPassword = await bcrypt.hash(password, 8);
+                const insertSql = `INSERT INTO user (email, password) VALUES (?, ?)`;
+
+                db.query(insertSql, [email, hashedPassword], (err, result) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        return res.status(400).json({ message: "Data insertion failed.\n" });
+                    }
+
+                    res.json({
+                        message: "Data inserted successfully.\n",
+                        userId: result.insertId
+                    });
+                });
+            });
+        });
+
+        /**
+         * @swagger
+         * /signin:
+         *   post:
+         *     summary: Sign in user
+         *     tags: [Authentication]
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - email
+         *               - password
+         *             properties:
+         *               email:
+         *                 type: string
+         *               password:
+         *                 type: string
+         *     responses:
+         *       200:
+         *         description: Sign in successful
+         *       401:
+         *         description: Invalid credentials
+         */
+        app.post('/signin', async (req, res) => {
+            const { email, password } = req.body;
+            const sql = `SELECT * FROM user WHERE email = ?`;
+
+            db.query(sql, [email], async (err, results) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ error: "Server error.\n" });
+                }
+
+                if (results.length === 0) {
+                    return res.status(401).json({ error: "Invalid email or password.\n" });
+                }
+
+                const user = results[0];
+                const passwordMatch = await bcrypt.compare(password, user.password);
+
+                if (passwordMatch) {
+                    const sessionToken = this.generateSessionToken();
+                    const maxAge = SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+                    
+                    sessions.set(sessionToken, {
+                        email: user.email,
+                        userId: user.id,
+                        createdAt: Date.now(),
+                        expiresAt: Date.now() + maxAge
+                    });
+
+                    res.cookie(SESSION_COOKIE_NAME, sessionToken, {
+                        httpOnly: true,
+                        sameSite: 'lax',
+                        maxAge: maxAge
+                    });
+
+                    res.json({
+                        message: "Sign in successful",
+                        email: user.email,
+                        userType: user.userType || 'user',
+                        userId: user.id
+                    });
+                } else {
+                    res.status(401).json({ error: "Invalid email or password.\n" });
+                }
+            });
+        });
+
+        /**
+         * @swagger
+         * /create-card-group:
+         *   post:
+         *     summary: Create a new card group
+         *     tags: [Cards]
+         *     security:
+         *       - cookieAuth: []
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - name
+         *               - cards
+         *             properties:
+         *               name:
+         *                 type: string
+         *               description:
+         *                 type: string
+         *               cards:
+         *                 type: array
+         *                 items:
+         *                   type: object
+         *                   properties:
+         *                     question:
+         *                       type: string
+         *                     answer:
+         *                       type: string
+         *     responses:
+         *       200:
+         *         description: Card group created successfully
+         *       401:
+         *         description: Not authenticated
+         *       403:
+         *         description: No remaining free API calls
+         */
+        app.post('/create-card-group', (req, res) => {
+            const userId = this.getUserIdFromSession(req);
+            
+            if (!userId) {
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            const checkCallsSql = `SELECT remaining_free_api_calls FROM user WHERE id = ?`;
+            db.query(checkCallsSql, [userId], (err, userResults) => {
+                if (err || userResults.length === 0) {
+                    return res.status(500).json({ error: 'Failed to verify user' });
+                }
+
+                if (userResults[0].remaining_free_api_calls <= 0) {
+                    return res.status(403).json({ error: 'No remaining free API calls' });
+                }
+
+                const { name, description, cards } = req.body;
+
+                if (!name || !Array.isArray(cards) || cards.length === 0) {
+                    return res.status(400).json({ error: 'Invalid card group data' });
+                }
+
+                const groupSql = `INSERT INTO card_groups (user_id, name, description) VALUES (?, ?, ?)`;
+
+                db.query(groupSql, [userId, name, description || ''], (err, groupResult) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        return res.status(500).json({ error: 'Failed to create card group' });
+                    }
+
+                    const groupId = groupResult.insertId;
+                    const cardSql = `INSERT INTO cards (group_id, question, answer) VALUES ?`;
+                    const cardValues = cards.map(card => [groupId, card.question, card.answer]);
+
+                    db.query(cardSql, [cardValues], (err, cardResult) => {
+                        if (err) {
+                            console.error('Database error:', err);
+                            return res.status(500).json({ error: 'Failed to create cards' });
+                        }
+
+                        const decrementSql = `UPDATE user SET remaining_free_api_calls = remaining_free_api_calls - 1 WHERE id = ?`;
+                        db.query(decrementSql, [userId], (err) => {
+                            if (err) {
+                                console.error('Failed to decrement API calls:', err);
+                            }
+
+                            res.json({
+                                message: 'Card group created successfully',
+                                groupId: groupId,
+                                cardsCreated: cardResult.affectedRows,
+                                remainingApiCalls: userResults[0].remaining_free_api_calls - 1
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
+        /**
+         * @swagger
+         * /admin/users:
+         *   delete:
+         *     summary: Delete a user (Admin only)
+         *     tags: [Admin]
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - userId
+         *               - adminEmail
+         *               - adminPassword
+         *             properties:
+         *               userId:
+         *                 type: integer
+         *               adminEmail:
+         *                 type: string
+         *               adminPassword:
+         *                 type: string
+         *     responses:
+         *       200:
+         *         description: User deleted successfully
+         *       401:
+         *         description: Unauthorized
+         */
+        app.delete('/admin/users', async (req, res) => {
+            const { userId, adminEmail, adminPassword } = req.body;
+
+            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
+            db.query(adminSql, [adminEmail], async (err, adminResults) => {
+                if (err || adminResults.length === 0) {
+                    return res.status(401).json({ error: "Unauthorized" });
+                }
+
+                const admin = adminResults[0];
+                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
+
+                if (!passwordMatch) {
+                    return res.status(401).json({ error: "Invalid password" });
+                }
+
+                const deleteSql = `DELETE FROM user WHERE id = ?`;
+                db.query(deleteSql, [userId], (err, result) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        return res.status(500).json({ error: "Server error.\n" });
+                    }
+
+                    res.json({ message: "User deleted successfully" });
+                });
+            });
+        });
+
+        /**
+         * @swagger
+         * /admin/users:
+         *   put:
+         *     summary: Update user (Admin only)
+         *     tags: [Admin]
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             type: object
+         *             required:
+         *               - userId
+         *               - adminEmail
+         *               - adminPassword
+         *             properties:
+         *               userId:
+         *                 type: integer
+         *               userType:
+         *                 type: string
+         *               apiCallsIncrement:
+         *                 type: integer
+         *               adminEmail:
+         *                 type: string
+         *               adminPassword:
+         *                 type: string
+         *     responses:
+         *       200:
+         *         description: User updated successfully
+         *       401:
+         *         description: Unauthorized
+         */
+        app.put('/admin/users', async (req, res) => {
+            const { userId, userType: newUserType, apiCallsIncrement, adminEmail, adminPassword } = req.body;
+
+            const adminSql = `SELECT * FROM user WHERE email = ? AND userType = 'admin'`;
+            db.query(adminSql, [adminEmail], async (err, adminResults) => {
+                if (err || adminResults.length === 0) {
+                    return res.status(401).json({ error: "Unauthorized" });
+                }
+
+                const admin = adminResults[0];
+                const passwordMatch = await bcrypt.compare(adminPassword, admin.password);
+
+                if (!passwordMatch) {
+                    return res.status(401).json({ error: "Invalid password" });
+                }
+
+                let updateSql, updateParams;
+                if (newUserType && apiCallsIncrement) {
+                    updateSql = `UPDATE user SET userType = ?, remaining_free_api_calls = remaining_free_api_calls + ? WHERE id = ?`;
+                    updateParams = [newUserType, apiCallsIncrement, userId];
+                } else if (newUserType) {
+                    updateSql = `UPDATE user SET userType = ? WHERE id = ?`;
+                    updateParams = [newUserType, userId];
+                } else if (apiCallsIncrement) {
+                    updateSql = `UPDATE user SET remaining_free_api_calls = remaining_free_api_calls + ? WHERE id = ?`;
+                    updateParams = [apiCallsIncrement, userId];
+                } else {
+                    return res.status(400).json({ error: "No update parameters provided" });
+                }
+
+                db.query(updateSql, updateParams, (err, result) => {
+                    if (err) {
+                        console.error('Database error:', err);
+                        return res.status(500).json({ error: "Server error.\n" });
+                    }
+
+                    res.json({ message: "User updated successfully" });
+                });
+            });
+        });
+
+        app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
+            console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
         });
     }
 
