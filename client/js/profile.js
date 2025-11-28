@@ -32,21 +32,42 @@ class ProfilePage {
         this.elements.profileContent.style.display = 'none';
 
         try {
-            const response = await fetch(`${this.SERVER_URL}/profile`, {
+            const url = `${this.SERVER_URL}/profile`;
+            console.log('=== PROFILE LOAD DEBUG ===');
+            console.log('1. Fetching from URL:', url);
+            console.log('2. SERVER_URL:', this.SERVER_URL);
+            console.log('3. Constants.URL_SERVER:', Constants.URL_SERVER);
+            console.log('4. Document cookies:', document.cookie);
+            
+            const response = await fetch(url, {
                 credentials: 'include'
             });
 
+            console.log('5. Response status:', response.status);
+            console.log('6. Response statusText:', response.statusText);
+            console.log('7. Response headers:', {
+                'content-type': response.headers.get('content-type'),
+                'access-control-allow-credentials': response.headers.get('access-control-allow-credentials'),
+                'access-control-allow-origin': response.headers.get('access-control-allow-origin')
+            });
+
+            const responseText = await response.text();
+            console.log('8. Response text:', responseText);
+
             if (!response.ok) {
-                throw new Error('Failed to load profile');
+                throw new Error(`Failed to load profile: ${response.status} ${response.statusText} - ${responseText}`);
             }
 
-            const profile = await response.json();
+            const profile = JSON.parse(responseText);
+            console.log('9. Parsed profile:', profile);
+            
             this.displayProfile(profile);
 
             this.elements.loadingMessage.style.display = 'none';
             this.elements.profileContent.style.display = 'block';
         } catch (error) {
             console.error('Load profile error:', error);
+            console.error('Error stack:', error.stack);
             this.elements.loadingMessage.style.display = 'none';
             this.elements.errorMessage.textContent = 'Failed to load profile. Please try again.';
             this.elements.errorMessage.style.display = 'block';
