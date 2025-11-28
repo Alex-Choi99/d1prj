@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    Auth.init() //already handles form initialization
+    // Auth.init();
 
     Auth.updateNavigation();
 
