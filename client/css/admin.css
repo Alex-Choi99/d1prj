@@ -8,6 +8,7 @@
 .admin-section h1 {
     margin-bottom: 30px;
     color: #333;
+    font-size: clamp(1.8rem, 5vw, 2.5rem);
 }
 
 /* Admin Actions */
@@ -330,25 +331,108 @@ input[type="checkbox"] {
 }
 
 /* Responsive Design */
+@media (max-width: 1024px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    table {
+        min-width: 600px;
+    }
+}
+
 @media (max-width: 768px) {
+    .admin-section {
+        padding: 20px 0;
+    }
+    
+    .admin-section h1 {
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    .table-section h2 {
+        font-size: clamp(1.3rem, 4vw, 1.8rem);
+        margin-bottom: 15px;
+        text-align: center;
+    }
+
     .admin-actions {
         flex-direction: column;
+        gap: 8px;
     }
 
     .btn {
         width: 100%;
+        font-size: clamp(0.8rem, 3vw, 1rem);
+        padding: 12px 16px;
     }
 
-    #usersTable {
-        font-size: 14px;
+    table {
+        font-size: clamp(0.7rem, 2.5vw, 0.9rem);
+        min-width: 500px;
     }
 
-    #usersTable th,
-    #usersTable td {
-        padding: 8px 10px;
+    table th,
+    table td {
+        padding: clamp(6px, 2vw, 12px) clamp(4px, 1.5vw, 8px);
     }
 
     .modal-content {
         padding: 20px;
+        margin: 20px;
+        max-width: calc(100vw - 40px);
+    }
+    
+    .modal-content h2 {
+        font-size: clamp(1.2rem, 4vw, 1.5rem);
+    }
+    
+    .form-group label {
+        font-size: clamp(0.9rem, 3vw, 1rem);
+    }
+    
+    .form-group input {
+        font-size: clamp(0.9rem, 3vw, 1rem);
+        padding: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-section {
+        padding: 15px 0;
+    }
+    
+    .container {
+        padding: 0 10px;
+    }
+    
+    .admin-actions {
+        gap: 6px;
+    }
+    
+    .btn {
+        padding: 10px 12px;
+        font-size: 0.85rem;
+    }
+    
+    table {
+        font-size: 0.75rem;
+        min-width: 450px;
+    }
+    
+    table th,
+    table td {
+        padding: 8px 4px;
+    }
+    
+    .modal-content {
+        padding: 15px;
+        margin: 15px;
+    }
+    
+    .table-section {
+        margin-bottom: 25px;
     }
 }
