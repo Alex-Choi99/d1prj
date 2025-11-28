@@ -486,7 +486,8 @@ class Main {
 
                     res.cookie(SESSION_COOKIE_NAME, sessionToken, {
                         httpOnly: true,
-                        sameSite: 'lax',
+                        sameSite: 'none',  // Required for cross-site cookies
+                        secure: true,      // Required when sameSite is 'none'
                         maxAge: maxAge
                     });
 
