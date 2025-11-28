@@ -4,7 +4,7 @@
 
 class ProfilePage {
     constructor() {
-        this.SERVER_URL = Constants.URL_SERVER.replace(/\/+$/, '');
+        this.SERVER_URL = Constants.URL_SERVER;
         this.initializeElements();
         this.loadProfile();
     }
