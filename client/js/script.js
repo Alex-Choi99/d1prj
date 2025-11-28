@@ -1,13 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Auth.init();
-
-    Auth.updateNavigation();
-
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            Auth.logout();
-        });
-    }
+    // Initialize Auth for pages that don't load navbar (signin/signup)
+    Auth.init();
 });
