@@ -32,15 +32,26 @@ class ProfilePage {
         this.elements.profileContent.style.display = 'none';
 
         try {
+            console.log('Fetching profile from:', `${this.SERVER_URL}/profile`);
+            console.log('Credentials included:', true);
+            
             const response = await fetch(`${this.SERVER_URL}/profile`, {
                 credentials: 'include'
             });
 
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+            
+            const responseText = await response.text();
+            console.log('Response text:', responseText);
+            
             if (!response.ok) {
-                throw new Error('Failed to load profile');
+                throw new Error(`Failed to load profile: ${response.status} - ${responseText}`);
             }
 
-            const profile = await response.json();
+            const profile = JSON.parse(responseText);
+            console.log('Profile data:', profile);
+            
             this.displayProfile(profile);
 
             this.elements.loadingMessage.style.display = 'none';
